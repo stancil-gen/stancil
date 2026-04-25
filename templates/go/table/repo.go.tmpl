@@ -1,0 +1,12 @@
+package tables
+
+import (
+	"context"
+)
+
+// {{ .RepoInterface }} provides pure explicit physical domain access strictly avoiding structural leakage
+type {{ .RepoInterface }} interface {
+{{ range .Queries }}
+	{{ .Name }}(ctx context.Context{{ range .Params }}, {{ .Name }} {{ .GoType }}{{ end }}) ({{ .ReturnType }}, error)
+{{ end }}
+}

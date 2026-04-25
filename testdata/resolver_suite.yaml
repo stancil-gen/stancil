@@ -1,0 +1,297 @@
+version: 1
+project: orders-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+  - name: REDIS_URL
+    type: str
+    required: true
+  - name: JWT_SECRET
+    type: str
+    required: true
+  - name: STRIPE_URL
+    type: str
+    required: true
+  - name: KAFKA_BROKER
+    type: str
+    required: true
+
+types:
+  - name: Money
+    fields:
+      - name: amount
+        type: decimal
+        required: true
+      - name: currency
+        type: str
+        required: true
+        rules:
+          - type: min_length
+            value: 3
+
+tables:
+  - name: users
+    fields:
+      - name: first_name
+        type: str
+        required: true
+      - name: last_name
+        type: str
+        required: true
+      - name: email
+        type: str
+        required: true
+        unique: true
+      - name: password_hash
+        type: str
+        required: true
+        private: true
+      - name: role
+        type: enum
+        values: [admin, user]
+        default: user
+      - name: status
+        type: enum
+        values: [active, suspended]
+        default: active
+    queries:
+      - find_by: [email]
+      - find_by: [status]
+      - soft_delete: true
+      - paginate: offset
+        order_by:
+          - field: created_at
+            direction: desc
+    soft_delete: true
+    errors: [NotFound, EmailTaken]
+
+  - name: orders
+    fields:
+      - name: user_id
+        type: uuid
+        required: true
+      - name: status
+        type: enum
+        values: [pending, confirmed, shipped, delivered, cancelled]
+        default: pending
+      - name: total
+        type: Money
+        required: true
+      - name: items
+        type: json
+    queries:
+      - find_by: [user_id, status]
+      - soft_delete: true
+      - paginate: cursor
+        order_by:
+          - field: created_at
+            direction: desc
+    soft_delete: true
+    errors: [NotFound, InvalidTransition]
+
+transactions:
+  - name: PlaceOrder
+    type: local
+    steps:
+      - name: CreateOrder
+        sql: |
+          INSERT INTO orders (user_id, total, status)
+          VALUES ($1, $2, 'pending') RETURNING id
+        params:
+          - name: user_id
+            type: uuid
+          - name: total
+            type: decimal
+      - name: DeductInventory
+        sql: |
+          UPDATE inventory
+          SET quantity = quantity - $1
+          WHERE product_id = $2 AND quantity >= $1
+        params:
+          - name: quantity
+            type: int
+          - name: product_id
+            type: uuid
+        error_if_rows: 0
+        error: InsufficientStock
+
+externals:
+  - name: StripeClient
+    type: http
+    base_url: "${STRIPE_URL}"
+    auth: bearer_token
+    timeout: 10s
+    retry:
+      attempts: 3
+      backoff: exponential
+      on_status: [429, 502, 503]
+    calls:
+      - name: ChargeCard
+        method: POST
+        path: /v1/charges
+        body:
+          name: ChargeRequest
+          fields:
+            - name: amount
+              type: decimal
+              required: true
+            - name: currency
+              type: str
+              required: true
+            - name: token
+              type: str
+              required: true
+        response:
+          name: ChargeResponse
+          fields:
+            - name: charge_id
+              type: str
+            - name: status
+              type: str
+        errors:
+          - status: 402
+            error: CardDeclined
+          - status: 429
+            error: RateLimited
+
+messaging:
+  broker: kafka
+  brokers: ["${KAFKA_BROKER}"]
+  producers:
+    - topic: user.created
+      event: UserCreated
+      key: user_id
+    - topic: order.placed
+      event: OrderPlaced
+      key: order_id
+  consumers:
+    - topic: payment.completed
+      event: PaymentCompleted
+      group: orders-service
+      handler: OnPaymentCompleted
+
+cache:
+  provider: redis
+  url: "${REDIS_URL}"
+  prefix: orders-svc
+  interfaces:
+    - name: UserCache
+      key_template: "user:{id}"
+      value_type: UserResponse
+      default_ttl: 5m
+      methods: [Get, Set, Delete, Invalidate]
+
+auth:
+  provider: jwt
+  expiry: 24h
+  roles: [admin, user]
+
+resources:
+  - group: UserAPIs
+    base_path: /users
+    auth: jwt
+    apis:
+      - name: CreateUser
+        method: POST
+        path: /
+        auth: public
+        dtos:
+          request:
+            name: CreateUserRequest
+            fields:
+              - name: first_name
+                type: str
+                required: true
+              - name: last_name
+                type: str
+                required: true
+              - name: email
+                type: str
+                required: true
+              - name: password
+                type: str
+                required: true
+          response:
+            name: CreateUserResponse
+            fields:
+              - name: user_id
+                type: uuid
+              - name: email
+                type: str
+        steps:
+          - id: writeUser
+            fatal: true
+            touch:
+              table: users
+              op: create
+          - id: notifyCreated
+            touch:
+              message: UserCreated
+
+      - name: GetUser
+        method: GET
+        path: /:id
+        auth: jwt
+        dtos:
+          request:
+            name: GetUserRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+          response:
+            name: GetUserResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: first_name
+                type: str
+              - name: last_name
+                type: str
+              - name: email
+                type: str
+        steps:
+          - id: fetchUser
+            fatal: true
+            touch:
+              table: users
+              op: get
+
+  - group: OrderAPIs
+    base_path: /orders
+    auth: jwt
+    apis:
+      - name: PlaceOrder
+        method: POST
+        path: /
+        auth: jwt
+        dtos:
+          request:
+            name: PlaceOrderRequest
+            fields:
+              - name: product_id
+                type: uuid
+                required: true
+              - name: payment_token
+                type: str
+                required: true
+          response:
+            name: PlaceOrderResponse
+            fields:
+              - name: order_id
+                type: uuid
+        steps:
+          - id: chargePayment
+            fatal: true
+            touch:
+              external: StripeClient
+              method: ChargeCard
+          - id: placeOrderTx
+            fatal: true
+            touch:
+              transaction: PlaceOrder

@@ -1,0 +1,13 @@
+{
+  "files": [
+    "lib/container/container.go",
+    "lib/container/container_test.go",
+    "lib/errors/errors.go",
+    "lib/graph/graph.go",
+    "lib/handler/handler.go",
+    "mock.success.txt",
+    "mock.success.txt",
+    "mock.success.txt"
+  ],
+  "spec_hash": "hash123"
+}

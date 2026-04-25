@@ -1,0 +1,336 @@
+version: 1
+project: orders-service
+lang:    go
+framework: gin
+db:      postgres
+
+config:
+  - name: DATABASE_URL       
+    type: str  
+    required: true
+  - name: REDIS_URL          
+    type: str  
+    required: true
+  - name: JWT_SECRET         
+    type: str  
+    required: true  
+    min_length: 32
+  - name: STRIPE_URL         
+    type: str  
+    required: true
+  - name: KAFKA_BROKER       
+    type: str  
+    required: true
+  - name: PORT               
+    type: int  
+    default: 8080
+
+types:
+  - name: Money
+    fields:
+      - name: amount    
+        type: decimal  
+        required: true
+      - name: currency  
+        type: str      
+        required: true
+        rules: [{type: min_length, value: 3}]
+
+tables:
+  - name: users
+    fields:
+      - name: first_name     
+        type: str   
+        required: true
+      - name: last_name      
+        type: str   
+        required: true
+      - name: email          
+        type: str   
+        required: true  
+        unique: true
+      - name: password_hash  
+        type: str   
+        required: true  
+        private: true
+      - name: role           
+        type: enum  
+        values: [admin, user]  
+        default: user
+      - name: status         
+        type: enum  
+        values: [active, suspended]  
+        default: active
+    queries:
+      - find_by: [email]
+      - find_by: [status]
+      - soft_delete: true
+      - paginate: offset
+        order_by: [{field: created_at, direction: desc}]
+    states:
+      field: status
+      transitions:
+        - from: active     to: suspended
+        - from: suspended  to: active
+    errors: [NotFound, EmailTaken]
+
+  - name: orders
+    fields:
+      - name: user_id   
+        type: uuid     
+        required: true
+      - name: status    
+        type: enum
+        values: [pending, confirmed, shipped, delivered, cancelled]
+        default: pending
+      - name: total     
+        type: Money    
+        required: true
+      - name: items     
+        type: json
+    queries:
+      - find_by: [user_id, status]
+      - soft_delete: true
+      - paginate: cursor
+        order_by: [{field: created_at, direction: desc}]
+    states:
+      field: status
+      transitions:
+        - from: pending    
+          to: confirmed
+        - from: confirmed  
+          to: shipped
+        - from: shipped    
+          to: delivered
+        - from: pending    
+          to: cancelled
+    errors: [NotFound, InvalidTransition]
+
+transactions:
+  - name: PlaceOrder
+    type: local
+    steps:
+      - name: CreateOrder
+        sql: |
+          INSERT INTO orders (user_id, total, status)
+          VALUES ($1, $2, 'pending') RETURNING id
+        params:
+          - name: user_id  
+            type: uuid
+          - name: total    
+            type: Money
+      - name: DeductInventory
+        sql: |
+          UPDATE inventory
+          SET quantity = quantity - $1
+          WHERE product_id = $2 AND quantity >= $1
+        params:
+          - name: quantity    
+            type: int
+          - name: product_id  
+            type: uuid
+        error_if_rows: 0
+        error: InsufficientStock
+
+externals:
+  - name:     StripeClient
+    type:     http
+    base_url: ${STRIPE_URL}
+    auth:     bearer_token
+    timeout:  10s
+    retry:
+      attempts: 3
+      backoff:  exponential
+      on_status: [429, 502, 503]
+    calls:
+      - name:     ChargeCard
+        method:   POST
+        path:     /v1/charges
+        body:     ChargeRequest
+        response: ChargeResponse
+        errors:
+          - status: 402  
+            error: CardDeclined
+          - status: 429  
+            error: RateLimited
+
+messaging:
+  broker:  kafka
+  brokers: [${KAFKA_BROKER}]
+  producers:
+    - topic: user.created   
+      event: UserCreated   
+      key: user_id
+    - topic: order.placed   
+      event: OrderPlaced   
+      key: order_id
+  consumers:
+    - topic:   payment.completed
+      event:   PaymentCompleted
+      group:   orders-service
+      handler: OnPaymentCompleted
+      retry:
+        attempts: 5
+        backoff:  exponential
+        dlq:      payment.failed.dlq
+
+cache:
+  provider: redis
+  url:      ${REDIS_URL}
+  prefix:   orders-svc
+  interfaces:
+    - name:         UserCache
+      key_template: "user:{id}"
+      value_type:   UserResponse
+      default_ttl:  5m
+      methods: [Get, Set, Delete, Invalidate]
+
+auth:
+  provider: jwt
+  secret:   ${JWT_SECRET}
+  expiry:   24h
+  login:
+    via:        [email, password]
+    rate_limit: 5/min
+  refresh_token:
+    storage: redis
+  password_reset:
+    via:    email
+    expiry: 1h
+  roles: [admin, user]
+  permissions:
+    - role: admin  
+      can: [read, write, delete]  
+      on: all
+    - role: user   
+      can: [read, write]           
+      on: own
+
+middleware: [logging, recovery, cors, rate_limit: 100rpm]
+
+resources:
+  - group:     UserAPIs
+    base_path: /users
+    auth:      jwt
+
+    apis:
+      - name:     CreateUser
+        method:   POST
+        path:     /
+        auth:     public
+        request:  CreateUserRequest
+        response: UserResponse
+
+        dtos:
+          request:
+            name: CreateUserRequest
+            fields:
+              - name: first_name  
+                type: str  required: true
+              - name: last_name   
+                type: str  required: true
+              - name: email       
+                type: str  required: true
+                rules: [{type: email}]
+              - name: password    
+                type: str  required: true
+                rules: [{type: min_length, value: 8}]
+          response:
+            name: UserResponse
+            fields:
+              - name: id          
+                type: uuid
+              - name: first_name  
+                type: str
+              - name: last_name   
+                type: str
+              - name: email       
+                type: str
+              - name: role        
+                type: str
+              - name: created_at  
+                type: timestamp
+
+        steps:
+          - id:    writeUser
+            touch: {table: users, op: create}
+            fatal: true
+          - id:    publishEvent
+            touch: {message: UserCreated}
+            fatal: false
+
+      - name:     GetUser
+        method:   GET
+        path:     /:id
+        auth:     jwt
+        response: UserResponse
+
+        dtos:
+          response:
+            name: UserResponse
+            fields:
+              - name: id          
+                type: uuid
+              - name: first_name  
+                type: str
+              - name: last_name   
+                type: str
+              - name: email       
+                type: str
+              - name: role        
+                type: str
+
+        steps:
+          - id:    readCache
+            touch: {cache: UserCache, op: get}
+            fatal: false
+          - id:    readDB
+            touch: {table: users, op: get}
+            fatal: true
+          - id:    writeCache
+            touch: {cache: UserCache, op: set}
+            fatal: false
+
+  - group:     OrderAPIs
+    base_path: /orders
+    auth:      jwt
+
+    apis:
+      - name:   PlaceOrder
+        method: POST
+        path:   /
+        auth:   jwt
+
+        dtos:
+          request:
+            name: PlaceOrderRequest
+            fields:
+              - name: product_id     
+                type: uuid   required: true
+              - name: quantity       
+                type: int    required: true
+              - name: payment_token  
+                type: str    required: true
+          response:
+            name: PlaceOrderResponse
+            fields:
+              - name: order_id   
+                type: uuid
+              - name: charge_id  
+                type: str
+              - name: status     
+                type: str
+
+        steps:
+          - id:    validateUser
+            touch: {table: users, op: get}
+            fatal: true
+          - id:    runTransaction
+            touch: {transaction: PlaceOrder}
+            fatal: true
+          - id:    chargePayment
+            touch: {external: StripeClient, method: ChargeCard}
+            fatal: true
+          - id:    publishEvent
+            touch: {message: OrderPlaced}
+            fatal: false

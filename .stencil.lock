@@ -1,0 +1,21 @@
+{
+  "files": [
+    "lib/container/container.go",
+    "lib/container/container_test.go",
+    "lib/errors/errors.go",
+    "lib/graph/graph.go",
+    "lib/handler/handler.go",
+    "tables/users/model.go",
+    "apis/CreateUser/dto.go",
+    "apis/CreateUser/hooks.go",
+    "apis/CreateUser/context.go",
+    "tables/users/repository.go",
+    "tables/users/postgres_repository.go",
+    "apis/CreateUser/service.go",
+    "apis/CreateUser/steps.go",
+    "apis/CreateUser/mappers.go",
+    "apis/CreateUser/handler.go",
+    "wire.go"
+  ],
+  "spec_hash": "9838a224a71e90199157c56684c8c39c7f8ef1e899d3d4fddabb8bb6507e21f8"
+}

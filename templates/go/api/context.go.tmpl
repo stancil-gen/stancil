@@ -1,0 +1,36 @@
+package apis
+
+import (
+{{ range .Imports }}
+	"{{ . }}"
+{{ end }}
+)
+
+// {{ .TypeName }} isolates Request boundary states and internal architectural evaluation loops natively
+type {{ .TypeName }} struct {
+
+	// ── Request ──────────────────────────────────────────────
+{{ range .RequestFields }}
+	{{ .Name }} {{ .GoType }}
+{{ end }}
+
+	// ── Control flags ─────────────────────────────────────────
+{{ range .FlagFields }}
+	{{ .Name }} bool // default: {{ if .Default }}true{{ else }}false{{ end }}
+{{ end }}
+
+	// ── Infra results ──────────────────────────────────────────
+{{ range .ResultFields }}
+	{{ .Name }} {{ .GoType }}
+{{ end }}
+
+	// ── Infra errors ───────────────────────────────────────────
+{{ range .ErrorFields }}
+	{{ .Name }} error
+{{ end }}
+
+	// ── Response ──────────────────────────────────────────────
+{{ range .ResponseFields }}
+	{{ .Name }} {{ .GoType }}
+{{ end }}
+}

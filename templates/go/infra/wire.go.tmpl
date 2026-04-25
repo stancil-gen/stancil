@@ -1,0 +1,20 @@
+package container
+
+import (
+	"{{ .Module }}/generated/lib/container"
+{{ range .Imports }}
+	{{ .Alias }} "{{ .Path }}"
+{{ end }}
+)
+
+// Configure physically binds the resolved dependency tree natively using Stencil Runtime Maps!
+func Configure() *container.Container {
+	c := container.New()
+	
+{{ range .Registrations }}
+	// {{ .Comment }}
+	c.Provide({{ .Provides }})
+{{ end }}
+
+	return c
+}

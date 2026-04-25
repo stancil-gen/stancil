@@ -1,0 +1,79 @@
+version: 1
+project: full-ecommerce
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: STRIPE_URL         
+    type: str  
+    required: true
+
+types:
+  - name: Money
+    fields:
+      - name: amount    
+        type: decimal  
+        required: true
+      - name: currency  
+        type: str      
+        required: true
+
+tables:
+  - name: orders
+    fields:
+      - name: user_id   
+        type: uuid     
+        required: true
+      - name: status    
+        type: enum
+        values: [pending, confirmed, shipped]
+        default: pending
+      - name: total     
+        type: Money    
+        required: true
+
+externals:
+  - name: StripeClient
+    type: http
+    base_url: ${STRIPE_URL}
+    calls:
+      - name: ChargeCard
+        method: POST
+        path: /v1/charges
+
+resources:
+  - group: OrderAPIs
+    base_path: /orders
+    auth: jwt
+    apis:
+      - name: PlaceOrder
+        method: POST
+        path: /
+        auth: jwt
+        dtos:
+          request:
+            name: PlaceOrderRequest
+            fields:
+              - name: product_id     
+                type: uuid   
+                required: true
+              - name: payment_token  
+                type: str    
+                required: true
+          response:
+            name: PlaceOrderResponse
+            fields:
+              - name: order_id   
+                type: uuid
+        steps:
+          - id: chargePayment
+            fatal: true
+            touch: 
+              external: StripeClient
+              op: ChargeCard
+          - id: writeOrder
+            fatal: true
+            touch: 
+              table: orders
+              op: create

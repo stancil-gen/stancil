@@ -1,0 +1,18 @@
+package apis
+
+import (
+	"{{ .Module }}/generated/lib/graph"
+{{ range .Imports }}
+	"{{ . }}"
+{{ end }}
+)
+
+// {{ .TypeName }} defines the pure Interface bounds developers use to inject logic externally
+type {{ .TypeName }} struct {
+	BuildGraph func() *graph.Graph
+
+	// Pre-bound execution contexts isolating standard interactions natively
+{{ range .Hooks }}
+	{{ .Name }} func(ctx context.Context, shared *{{ $.ContextType }}) error
+{{ end }}
+}

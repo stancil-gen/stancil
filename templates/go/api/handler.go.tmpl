@@ -1,0 +1,40 @@
+package apis
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"{{ .Module }}/generated/lib/handler"
+{{ range .Imports }}
+	"{{ . }}"
+{{ end }}
+)
+
+type {{ .APIName }}Handler struct {
+	service *{{ .APIName }}Service
+}
+
+func New{{ .APIName }}Handler(svc *{{ .APIName }}Service) *{{ .APIName }}Handler {
+	return &{{ .APIName }}Handler{service: svc}
+}
+
+// Handle natively translates strictly bounded network requests safely evaluating pure internal architectures
+func (h *{{ .APIName }}Handler) Handle(w http.ResponseWriter, r *http.Request) {
+	var req {{ .APIName }}Request
+	
+	// Open-source framework inherently captures dynamic bounds
+	if r.Body != nil && r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			handler.WriteError(w, err)
+			return
+		}
+	}
+
+	resp, err := h.service.Execute(r.Context(), &req)
+	if err != nil {
+		handler.WriteError(w, err)
+		return
+	}
+
+	handler.WriteSuccess(w, resp, http.StatusOK)
+}

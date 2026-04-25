@@ -1,0 +1,42 @@
+version: 1
+project: minimal-auth
+lang: go
+framework: gin
+db: postgres
+
+tables:
+  - name: accounts
+    fields:
+      - name: email
+        type: str
+        required: true
+        unique: true
+      - name: password_hash
+        type: str
+        required: true
+      - name: active
+        type: bool
+        default: true
+
+resources:
+  - group: AuthAPI
+    base_path: /auth
+    apis:
+      - name: RegisterAccount
+        method: POST
+        path: /register
+        steps:
+          - id: createAccount
+            fatal: true
+            touch:
+              table: accounts
+              op: create
+      - name: GetAccount
+        method: GET
+        path: /:id
+        steps:
+          - id: readAccount
+            fatal: false
+            touch:
+              table: accounts
+              op: get

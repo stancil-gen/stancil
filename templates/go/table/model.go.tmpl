@@ -1,0 +1,12 @@
+package tables
+
+{{ range .Imports }}
+import "{{ . }}"
+{{ end }}
+
+// {{ .StructName }} statically maps strictly mapped database attributes isolating external framework noise
+type {{ .StructName }} struct {
+{{ range .Fields }}
+	{{ .StructName }} {{ if .IsPointer }}*{{ end }}{{ .GoType }} `json:"{{ .Name }}" db:"{{ .Name }}"`
+{{ end }}
+}

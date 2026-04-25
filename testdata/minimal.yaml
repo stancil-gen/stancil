@@ -1,0 +1,37 @@
+version: 1
+project: orders-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+
+tables:
+  - name: users
+    fields:
+      - name: email
+        type: str
+        required: true
+        unique: true
+      - name: first_name
+        type: str
+      - name: active
+        type: bool
+        default: true
+
+resources:
+  - group: UserAPIs
+    base_path: /users
+    apis:
+      - name: CreateUser
+        method: POST
+        path: /
+        steps:
+          - id: writeUser
+            fatal: true
+            touch:
+              table: users
+              op: create

@@ -1,0 +1,32 @@
+package apis
+
+import (
+	"context"
+	"{{ .Module }}/generated/lib/errors"
+{{ range .Imports }}
+	"{{ . }}"
+{{ end }}
+)
+
+// {{ .APIName }}Mappers strictly defines mechanical inference fallbacks requiring overrides cleanly natively 
+type {{ .APIName }}Mappers interface {
+{{ range .Steps }}
+	Map{{ .StepName }}Input(ctx context.Context, shared *{{ $.ContextType }}) (*{{ .StepName }}Input, error)
+{{ end }}
+	MapResponse(ctx context.Context, shared *{{ $.ContextType }}) (*{{ $.APIName }}Response, error)
+}
+
+type Default{{ .APIName }}Mappers struct {}
+
+{{ range .Steps }}
+// Map{{ .StepName }}Input structurally attempts to infer matches via standard heuristics gracefully defaulting to explicit errors 
+func (m *Default{{ $.APIName }}Mappers) Map{{ .StepName }}Input(ctx context.Context, shared *{{ $.ContextType }}) (*{{ .StepName }}Input, error) {
+	// MUST OVERRIDE - Cross Step data bounds infer failure natively!
+	return nil, errors.NewUnprocessable("Map{{ .StepName }}Input must be overridden")
+}
+{{ end }}
+
+// MapResponse generates default fallback boundaries forcing end-user mappings intrinsically
+func (m *Default{{ .APIName }}Mappers) MapResponse(ctx context.Context, shared *{{ $.ContextType }}) (*{{ $.APIName }}Response, error) {
+	return nil, errors.NewUnprocessable("MapResponse must be overridden")
+}

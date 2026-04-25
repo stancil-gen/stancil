@@ -1,0 +1,120 @@
+package apis
+
+import (
+	"{{ .Module }}/generated/lib/graph"
+{{ range .Imports }}
+	"{{ . }}"
+{{ end }}
+)
+
+type {{ .APIName }}Service struct {
+	hooks   {{ .HooksType }}
+	mappers {{ .APIName }}Mappers
+{{ range .Repos }}
+	{{ .Var }} {{ .Type }}
+{{ end }}
+}
+
+func New{{ .APIName }}Service(hooks {{ .HooksType }}, mappers {{ .APIName }}Mappers{{ range .Repos }}, {{ .Var }} {{ .Type }}{{ end }}) *{{ .APIName }}Service {
+	return &{{ .APIName }}Service{
+		hooks:   hooks,
+		mappers: mappers,
+{{ range .Repos }}
+		{{ .Var }}: {{ .Var }},
+{{ end }}
+	}
+}
+
+// buildDefaultGraph dynamically structures a secure linear topology natively evaluated by the Engine
+func (s *{{ .APIName }}Service) buildDefaultGraph() *graph.Graph {
+	g := graph.NewGraph()
+{{ range .Steps }}
+	g.Then("{{ .StepName }}")
+{{ end }}
+	return g.Respond()
+}
+
+// {{ .APIName }} is the mechanical substitution layer executing structured logic inherently!
+func (s *{{ .APIName }}Service) Execute(ctx context.Context, req *{{ .APIName }}Request) (*{{ .APIName }}Response, error) {
+	shared := &{{ .ContextType }}{
+		Request: *req,
+	}
+
+	execGraph := s.hooks.BuildGraph
+	var compiledGraph *graph.Graph
+	if execGraph != nil {
+		compiledGraph = execGraph()
+	} else {
+		compiledGraph = s.buildDefaultGraph()
+	}
+
+	if s.hooks.Before{{ .APIName }} != nil {
+		if err := s.hooks.Before{{ .APIName }}(ctx, shared); err != nil {
+			return nil, err
+		}
+	}
+
+	stepFns := map[string]graph.StepFn{
+{{ range .Steps }}
+		"{{ .StepName }}": func(ctx context.Context) error {
+
+
+			input, err := s.mappers.Map{{ .StepName }}Input(ctx, shared)
+			if err != nil {
+				return err
+			}
+
+			if s.hooks.{{ .BeforeHook }} != nil {
+				if err := s.hooks.{{ .BeforeHook }}(ctx, shared); err != nil {
+					return err
+				}
+			}
+
+{{ if and (eq .Kind "Table") (eq .Op "create") }}
+			infraErr := s.{{ .RepoVar }}.Create{{ .ModelRef }}s(ctx, input.Data)
+			shared.{{ .StepName }}Result = input.Data
+			shared.{{ .StepName }}Error = infraErr
+{{ else if and (eq .Kind "Table") (eq .Op "get") }}
+			res, infraErr := s.{{ .RepoVar }}.Get{{ .ModelRef }}s(ctx, input.ID)
+			shared.{{ .StepName }}Result = res
+			shared.{{ .StepName }}Error = infraErr
+{{ else if and (eq .Kind "Table") (eq .Op "update") }}
+			infraErr := s.{{ .RepoVar }}.Update{{ .ModelRef }}s(ctx, input.ID, input.Data)
+			shared.{{ .StepName }}Result = input.Data
+			shared.{{ .StepName }}Error = infraErr
+{{ else if and (eq .Kind "Table") (eq .Op "delete") }}
+			infraErr := s.{{ .RepoVar }}.Delete{{ .ModelRef }}s(ctx, input.ID)
+			shared.{{ .StepName }}Error = infraErr
+{{ else if and (eq .Kind "Table") (eq .Op "list") }}
+			_, infraErr := s.{{ .RepoVar }}.List{{ .ModelRef }}s(ctx, input.Limit, input.Offset)
+			shared.{{ .StepName }}Error = infraErr
+{{ end }}
+
+			if s.hooks.{{ .AfterHook }} != nil {
+				if err := s.hooks.{{ .AfterHook }}(ctx, shared); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+{{ end }}
+	}
+
+	if err := compiledGraph.Execute(ctx, stepFns); err != nil {
+		return nil, err
+	}
+
+	if s.hooks.BeforeResponse != nil {
+		if err := s.hooks.BeforeResponse(ctx, shared); err != nil {
+			return nil, err
+		}
+	}
+
+	response, err := s.mappers.MapResponse(ctx, shared)
+	if err != nil {
+		return nil, err
+	}
+	
+	shared.Response = *response
+	return &shared.Response, nil
+}
