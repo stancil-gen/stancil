@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(textutil:*)",
+      "Bash(wc -l /Users/harshits/Desktop/projects/stancil/internal/**/*.go)",
+      "Bash(go run:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(grep -c \"--- PASS\")",
+      "Bash(go vet:*)",
+      "Bash(go mod:*)",
+      "Bash(rm -rf /Users/harshits/Desktop/projects/order-service/generated /Users/harshits/Desktop/projects/order-service/main.go /Users/harshits/Desktop/projects/order-service/go.mod /Users/harshits/Desktop/projects/order-service/go.sum /Users/harshits/Desktop/projects/order-service/hooks /Users/harshits/Desktop/projects/order-service/config)",
+      "Bash(mv generated/ /Users/harshits/Desktop/projects/order-service/generated/)",
+      "Bash(rm -rf /Users/harshits/Desktop/projects/order-service/generated /Users/harshits/Desktop/projects/order-service/go.sum)",
+      "Bash(curl -s http://localhost:8080/)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(rm -rf /Users/harshits/Desktop/projects/order-service/generated /Users/harshits/Desktop/projects/order-service/main.go /Users/harshits/Desktop/projects/order-service/hooks /Users/harshits/Desktop/projects/order-service/go.sum)",
+      "Bash(mv main.go hooks/ /Users/harshits/Desktop/projects/order-service/)",
+      "Read(//Users/harshits/Desktop/projects/order-service/generated/**)",
+      "Read(//Users/harshits/Desktop/projects/order-service/hooks/**)",
+      "Bash(curl -s http://localhost:8080/api/v1/customers/)",
+      "Bash(curl -s http://localhost:8080/api/v1/orders/)",
+      "Bash(curl -s http://localhost:8080/api/v1/products/ kill %1 wait echo \"server stopped\")",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"first_name\":\"Test\",\"last_name\":\"User\"}' http://localhost:8080/api/v1/customers/)",
+      "Read(//Users/harshits/Desktop/projects/**)",
+      "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/config /Users/harshits/Desktop/projects/order-service/generated/)",
+      "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/db /Users/harshits/Desktop/projects/order-service/generated/)",
+      "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/externals /Users/harshits/Desktop/projects/order-service/generated/)",
+      "Bash(chmod -R u+w /Users/harshits/Desktop/projects/order-service/generated/)",
+      "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/externals/. /Users/harshits/Desktop/projects/order-service/generated/externals/)",
+      "Bash(xargs ls:*)"
+    ]
+  }
+}

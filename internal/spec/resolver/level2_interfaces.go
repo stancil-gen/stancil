@@ -21,20 +21,20 @@ func buildRepositoryInterface(table spec.TableAST, tableObj *spec.ResolvedObject
 	// Always-generated standard CRUD
 	iface.Functions = append(iface.Functions,
 		repoFunc(fmt.Sprintf("Create%s", name),
-			[]spec.ResolvedParam{ctxParam(), ptrParam("data", name)},
-			[]spec.ResolvedReturn{errReturn()},
+			[]spec.ResolvedParam{ptrParam("data", name)},
+			nil,
 			spec.QueryCreate),
 		repoFunc(fmt.Sprintf("Get%sByID", name),
-			[]spec.ResolvedParam{ctxParam(), uuidParam("id")},
-			[]spec.ResolvedReturn{ptrReturn(name), errReturn()},
+			[]spec.ResolvedParam{uuidParam("id")},
+			[]spec.ResolvedReturn{ptrReturn(name)},
 			spec.QueryGet),
 		repoFunc(fmt.Sprintf("Update%s", name),
-			[]spec.ResolvedParam{ctxParam(), uuidParam("id"), ptrParam("data", name)},
-			[]spec.ResolvedReturn{errReturn()},
+			[]spec.ResolvedParam{uuidParam("id"), ptrParam("data", name)},
+			nil,
 			spec.QueryUpdate),
 		repoFunc(fmt.Sprintf("Delete%s", name),
-			[]spec.ResolvedParam{ctxParam(), uuidParam("id")},
-			[]spec.ResolvedReturn{errReturn()},
+			[]spec.ResolvedParam{uuidParam("id")},
+			nil,
 			spec.QueryDelete),
 	)
 
@@ -54,8 +54,8 @@ func expandQuery(q spec.QueryAST, modelName string, tableObj *spec.ResolvedObjec
 	if q.SoftDelete {
 		fns = append(fns, repoFunc(
 			fmt.Sprintf("SoftDelete%s", modelName),
-			[]spec.ResolvedParam{ctxParam(), uuidParam("id")},
-			[]spec.ResolvedReturn{errReturn()},
+			[]spec.ResolvedParam{uuidParam("id")},
+			nil,
 			spec.QuerySoftDelete,
 		))
 		return fns
@@ -64,8 +64,8 @@ func expandQuery(q spec.QueryAST, modelName string, tableObj *spec.ResolvedObjec
 	if q.BulkCreate {
 		fns = append(fns, repoFunc(
 			fmt.Sprintf("BatchCreate%ss", modelName),
-			[]spec.ResolvedParam{ctxParam(), slicePtrParam("items", modelName)},
-			[]spec.ResolvedReturn{errReturn()},
+			[]spec.ResolvedParam{slicePtrParam("items", modelName)},
+			nil,
 			spec.QueryBulkCreate,
 		))
 		return fns
@@ -73,24 +73,27 @@ func expandQuery(q spec.QueryAST, modelName string, tableObj *spec.ResolvedObjec
 
 	if len(q.FindBy) > 0 {
 		suffix := "By" + joinPascal(q.FindBy)
-		params := append([]spec.ResolvedParam{ctxParam()}, buildQueryParams(q.FindBy, tableObj)...)
+		params := buildQueryParams(q.FindBy, tableObj)
 		var returns []spec.ResolvedReturn
+		var fnName string
 		if q.Returns == "single" {
-			returns = []spec.ResolvedReturn{ptrReturn(modelName), errReturn()}
+			returns = []spec.ResolvedReturn{ptrReturn(modelName)}
+			fnName = fmt.Sprintf("Get%s%s", modelName, suffix)
 		} else {
-			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), errReturn()}
+			returns = []spec.ResolvedReturn{slicePtrReturn(modelName)}
+			fnName = fmt.Sprintf("Get%ss%s", modelName, suffix)
 		}
-		fns = append(fns, repoFunc(fmt.Sprintf("Get%ss%s", modelName, suffix), params, returns, spec.QueryFindBy))
+		fns = append(fns, repoFunc(fnName, params, returns, spec.QueryFindBy))
 		return fns
 	}
 
 	if len(q.Exists) > 0 {
 		suffix := "By" + joinPascal(q.Exists)
-		params := append([]spec.ResolvedParam{ctxParam()}, buildQueryParams(q.Exists, tableObj)...)
+		params := buildQueryParams(q.Exists, tableObj)
 		fns = append(fns, repoFunc(
 			fmt.Sprintf("%sExists%s", modelName, suffix),
 			params,
-			[]spec.ResolvedReturn{primitiveReturn("bool"), errReturn()},
+			[]spec.ResolvedReturn{primitiveReturn("bool")},
 			spec.QueryExists,
 		))
 		return fns
@@ -98,11 +101,11 @@ func expandQuery(q spec.QueryAST, modelName string, tableObj *spec.ResolvedObjec
 
 	if len(q.Count) > 0 {
 		suffix := "By" + joinPascal(q.Count)
-		params := append([]spec.ResolvedParam{ctxParam()}, buildQueryParams(q.Count, tableObj)...)
+		params := buildQueryParams(q.Count, tableObj)
 		fns = append(fns, repoFunc(
 			fmt.Sprintf("Count%ss%s", modelName, suffix),
 			params,
-			[]spec.ResolvedReturn{primitiveReturn("int64"), errReturn()},
+			[]spec.ResolvedReturn{primitiveReturn("int64")},
 			spec.QueryCount,
 		))
 		return fns
@@ -116,27 +119,27 @@ func expandQuery(q spec.QueryAST, modelName string, tableObj *spec.ResolvedObjec
 		var params []spec.ResolvedParam
 		var returns []spec.ResolvedReturn
 		if paginateKind == "offset" {
-			params = []spec.ResolvedParam{ctxParam(), primitiveParam("page", "int"), primitiveParam("limit", "int")}
-			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), primitiveReturn("int"), errReturn()}
+			params = []spec.ResolvedParam{primitiveParam("page", "int"), primitiveParam("limit", "int")}
+			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), primitiveReturn("int")}
 		} else {
-			params = []spec.ResolvedParam{ctxParam(), primitiveParam("cursor", "string"), primitiveParam("limit", "int")}
-			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), primitiveReturn("string"), errReturn()}
+			params = []spec.ResolvedParam{primitiveParam("cursor", "string"), primitiveParam("limit", "int")}
+			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), primitiveReturn("string")}
 		}
 		fns = append(fns, repoFunc(fmt.Sprintf("List%ss", modelName), params, returns, spec.QueryPaginate))
 		return fns
 	}
 
 	if q.Custom != "" {
-		params := []spec.ResolvedParam{ctxParam()}
+		var params []spec.ResolvedParam
 		for _, p := range q.Params {
 			td := MapType(p.Type, lang, db, false)
 			params = append(params, spec.ResolvedParam{Name: p.Name, Type: td})
 		}
 		var returns []spec.ResolvedReturn
 		if q.Returns == "single" {
-			returns = []spec.ResolvedReturn{ptrReturn(modelName), errReturn()}
+			returns = []spec.ResolvedReturn{ptrReturn(modelName)}
 		} else {
-			returns = []spec.ResolvedReturn{slicePtrReturn(modelName), errReturn()}
+			returns = []spec.ResolvedReturn{slicePtrReturn(modelName)}
 		}
 		fns = append(fns, repoFunc(toPascalCase(q.Custom), params, returns, spec.QueryCustom))
 		return fns
@@ -210,7 +213,7 @@ func buildExternalInterface(ext spec.ExternalAST, objects []*spec.ResolvedObject
 	}
 
 	for _, call := range ext.Calls {
-		params := []spec.ResolvedParam{ctxParam()}
+		var params []spec.ResolvedParam
 		if call.Body != nil {
 			bodyName := toPascalCase(call.Body.Name)
 			bodyObj := findObjectByName(objects, bodyName)
@@ -229,10 +232,7 @@ func buildExternalInterface(ext spec.ExternalAST, objects []*spec.ResolvedObject
 					Type:    spec.TypeDescriptor{Kind: spec.TypeCustom, GoType: respName, IsCustom: true},
 					TypeRef: respObj,
 				},
-				errReturn(),
 			}
-		} else {
-			returns = []spec.ResolvedReturn{errReturn()}
 		}
 		fn := spec.ResolvedFunction{
 			Name:    toPascalCase(call.Name),
@@ -259,8 +259,8 @@ func buildHookInterface(api spec.APIAST, group spec.ResourceGroupAST, ctxObj *sp
 	hookSig := func(fnName string) spec.ResolvedFunction {
 		return spec.ResolvedFunction{
 			Name:    fnName,
-			Params:  []spec.ResolvedParam{ctxParam(), ptrParam("shared", ctxType)},
-			Returns: []spec.ResolvedReturn{errReturn()},
+			Params:  []spec.ResolvedParam{ptrParam("shared", ctxType)},
+			Returns: nil,
 		}
 	}
 
@@ -303,10 +303,9 @@ func buildMapperInterface(api spec.APIAST, group spec.ResourceGroupAST, ctxObj *
 	mapperSig := func(fnName, retType string) spec.ResolvedFunction {
 		return spec.ResolvedFunction{
 			Name:   fnName,
-			Params: []spec.ResolvedParam{ctxParam(), ptrParam("shared", ctxType)},
+			Params: []spec.ResolvedParam{ptrParam("shared", ctxType)},
 			Returns: []spec.ResolvedReturn{
 				{Type: spec.TypeDescriptor{Kind: spec.TypeCustom, GoType: retType, IsCustom: true}},
-				errReturn(),
 			},
 		}
 	}
@@ -355,7 +354,7 @@ func buildServiceInterface(group spec.ResourceGroupAST, objects []*spec.Resolved
 		reqName := toPascalCase(api.Name) + "Request"
 		respName := toPascalCase(api.Name) + "Response"
 
-		params := []spec.ResolvedParam{ctxParam()}
+		var params []spec.ResolvedParam
 		hasReq := false
 		for _, obj := range objects {
 			if obj != nil && obj.Name == reqName {
@@ -378,9 +377,9 @@ func buildServiceInterface(group spec.ResourceGroupAST, objects []*spec.Resolved
 			}
 		}
 		if hasResp {
-			returns = []spec.ResolvedReturn{ptrReturn(respName), errReturn()}
+			returns = []spec.ResolvedReturn{ptrReturn(respName)}
 		} else {
-			returns = []spec.ResolvedReturn{primitiveReturn("interface{}"), errReturn()}
+			returns = []spec.ResolvedReturn{primitiveReturn("interface{}")}
 		}
 
 		fn := spec.ResolvedFunction{

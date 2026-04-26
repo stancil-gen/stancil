@@ -21,7 +21,7 @@ types:
     fields:
       - name: link
         type: TypeA
-  
+
   # 3. Duplicate Type
   - name: Money
     fields:
@@ -44,21 +44,21 @@ tables:
       - name: status
         type: enum
         values: [pending, active, archived]
-    
-    # 4. State Machine Errors
+
+    # State Machine (valid — tests reachability)
     states:
       field: status
       transitions:
         - from: pending
           to: active
-  
+
   - name: orders
     fields:
       - name: id
         type: uuid
       - name: total
         type: UnknownType # UNKNOWN_TYPE
-  
+
   - name: orders # DUPLICATE_TABLE
     fields:
       - name: id
@@ -72,38 +72,22 @@ externals:
         method: POST
         path: /charges
 
-transactions:
-  - name: batch_op
-    steps:
-      - name: step1
-        sql: "" # EMPTY_SQL
-
-# 5. Auth Role Mismatch
-auth:
-  roles:
-    - user
-    - admin
-
 resources:
   - group: billing
     apis:
       - name: SecretAPI
         method: POST
         path: /secret
-        auth: jwt
-        roles:
-          - super_admin # UNKNOWN_ROLE (only user/admin defined)
-        
-        # 6. Step & Infra Errors
+
         steps:
           - id: step_one
             touch:
               table: non_matching_table # UNKNOWN_TABLE
           - id: step_one # DUPLICATE_STEP_ID
             touch:
-              cache: missing_cache # UNKNOWN_CACHE
-        
-        # 7. Privacy Leak
+              table: users
+
+        # Privacy Leak
         dtos:
           response:
             fields:

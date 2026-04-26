@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,8 +12,10 @@ import (
 	"stencil/internal/emitter"
 	"stencil/internal/generator"
 	"stencil/internal/generators/go/api"
+	"stencil/internal/generators/go/external"
 	"stencil/internal/generators/go/infra"
 	"stencil/internal/generators/go/table"
+	goTypes "stencil/internal/generators/go/types"
 	"stencil/internal/plan"
 	"stencil/internal/spec/parser"
 	"stencil/internal/spec/resolver"
@@ -71,15 +74,29 @@ var generateCmd = &cobra.Command{
 		reg := generator.NewRegistry()
 
 		reg.Register(table.NewModelGenerator(e))
+		reg.Register(table.NewErrorsGenerator(e))
 		reg.Register(table.NewRepoGenerator(e))
 		reg.Register(api.NewDTOGenerator(e))
 		reg.Register(api.NewContextGenerator(e))
 		reg.Register(api.NewHooksGenerator(e))
+		reg.Register(api.NewMapperGenerator(e))
 		reg.Register(api.NewServiceGenerator(e))
 		reg.Register(api.NewHandlerGenerator(e))
+		reg.Register(external.NewExternalGenerator(e))
+		reg.Register(goTypes.NewTypesGenerator(e))
+		reg.Register(infra.NewRoutesGenerator(e))
 		reg.Register(infra.NewWireGenerator(e))
+		reg.Register(infra.NewGoModGenerator(e))
+		reg.Register(infra.NewMainGenerator(e))
+		reg.Register(infra.NewDBGenerator(e))
+		reg.Register(infra.NewHooksScaffoldGenerator(e))
+		reg.Register(infra.NewConfigGenerator(e))
 
-		emit := emitter.NewEmitter("generated", hash)
+		specDir := filepath.Dir(args[0])
+		if specDir == "" || specDir == "." {
+			specDir = "."
+		}
+		emit := emitter.NewEmitter("generated", specDir, hash)
 		orch := generator.NewOrchestrator(reg, emit)
 
 		fmt.Printf("Executing Generator Pipeline securely across %d Parallel DAG Tiers...\n", len(dagPlan.Tiers))

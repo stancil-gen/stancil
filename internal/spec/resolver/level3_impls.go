@@ -75,8 +75,14 @@ func buildRepoImplQueryMethods(q spec.QueryAST, modelName string, tableObj *spec
 	if len(q.FindBy) > 0 {
 		suffix := "By" + joinPascal(q.FindBy)
 		filterFields := resolveFilterFields(q.FindBy, tableObj)
+		var funcName string
+		if q.Returns == "single" {
+			funcName = fmt.Sprintf("Get%s%s", modelName, suffix)
+		} else {
+			funcName = fmt.Sprintf("Get%ss%s", modelName, suffix)
+		}
 		m := repoMethod(
-			fmt.Sprintf("Get%ss%s", modelName, suffix),
+			funcName,
 			tableObj, spec.QueryFindBy, filterFields, "",
 		)
 		m.Touches[0].Op = q.Op
@@ -578,6 +584,7 @@ func buildServiceImpl(
 		Path:       fmt.Sprintf("generated/handler/%s/%s_impl.go", toSnakeCase(group.Group), toSnakeCase(group.Group)),
 		Kind:       spec.ServiceImpl,
 		Implements: serviceIface,
+		BasePath:   group.BasePath,
 		Imports:    make(map[spec.Lang]spec.ImportSet),
 	}
 
@@ -625,6 +632,8 @@ func buildServiceImpl(
 			SharedContext:  ctxObj,
 			ExecutionModel: spec.Sequential, // all APIs use sequential execution for now
 			MapperRef:      mapperRef,
+			HTTPMethod:     api.Method,
+			HTTPPath:       api.Path,
 		}
 
 		for _, step := range api.Steps {
@@ -709,67 +718,19 @@ func buildServiceImpl(
 				}
 
 			} else if t.Cache != "" {
-				// Find cache interface
-				cacheIfaceName := t.Cache
-				var cacheIface *spec.ResolvedInterface
-				for _, iface := range interfaces {
-					if iface != nil && iface.Name == cacheIfaceName {
-						cacheIface = iface
-						break
-					}
-				}
-
-				// Find the specific cache method
-				var cacheMethod *spec.ResolvedFunction
-				if cacheIface != nil {
-					methodName := toPascalCase(t.Op)
-					for i := range cacheIface.Functions {
-						if cacheIface.Functions[i].Name == methodName {
-							cacheMethod = &cacheIface.Functions[i]
-							break
-						}
-					}
-				}
-
-				// Add cache dependency
-				cacheFieldName := strings.ToLower(string(cacheIfaceName[0])) + cacheIfaceName[1:]
-				addDep("cache:"+t.Cache, cacheFieldName, "*"+cacheIfaceName+"Impl", "")
-
-				fatal := step.Fatal != nil && *step.Fatal
-				touch = spec.ResolvedTouch{
-					Kind:        spec.TouchKindCache,
-					CacheRef:    cacheIface,
-					CacheMethod: cacheMethod,
-					Op:          t.Op,
-					ResultField: outputField,
-					FatalError:  fatal,
-				}
+				// Cache touches — deferred to Phase 2
+				continue
 
 			} else if t.Transaction != "" {
-				// Transactions: no dependency on interface, just on the impl
-				txImplName := toPascalCase(t.Transaction) + "Tx"
-				txFieldName := strings.ToLower(string(txImplName[0])) + txImplName[1:]
-				addDep("tx:"+t.Transaction, txFieldName, "*"+txImplName, "")
-
-				fatal := step.Fatal != nil && *step.Fatal
-				touch = spec.ResolvedTouch{
-					Kind:        spec.TouchKindTransaction,
-					Op:          "Execute",
-					ResultField: outputField,
-					FatalError:  fatal,
-				}
+				// Transaction touches — deferred to Phase 2
+				continue
 
 			} else if t.Message != "" {
-				// Messaging producer
-				addDep("producer", "producer", "*messaging.Producer", "")
-
-				touch = spec.ResolvedTouch{
-					Kind:        spec.TouchKindMessage,
-					MessageName: t.Message,
-					ResultField: outputField,
-				}
+				// Messaging touches — deferred to Phase 2
+				continue
 			}
 
+			touch.StepID = step.ID
 			method.Touches = append(method.Touches, touch)
 		}
 

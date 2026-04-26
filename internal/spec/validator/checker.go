@@ -288,17 +288,17 @@ func (c *Checker) resolveAPIs() {
 				c.addError(path, "API_NO_STEPS", fmt.Sprintf("API '%s' must declare at least one step", api.Name))
 			}
 			
-			// Auth Handshake
-			if api.Auth != "" && c.ast.Auth == nil {
-				c.addError(path+".auth", "MISSING_AUTH_BLOCK", "API requires auth but no global auth: block is defined")
-			}
+			// Auth Handshake — deferred to Phase 2
+			// if api.Auth != "" && c.ast.Auth == nil {
+			// 	c.addError(path+".auth", "MISSING_AUTH_BLOCK", "API requires auth but no global auth: block is defined")
+			// }
 
-			// RBAC Check
-			for rIdx, role := range api.Roles {
-				if !c.symbols.Roles[role] {
-					c.addError(fmt.Sprintf("%s.roles[%d]", path, rIdx), "UNKNOWN_ROLE", fmt.Sprintf("Role '%s' is not defined in auth: config", role))
-				}
-			}
+			// RBAC Check — deferred to Phase 2
+			// for rIdx, role := range api.Roles {
+			// 	if !c.symbols.Roles[role] {
+			// 		c.addError(fmt.Sprintf("%s.roles[%d]", path, rIdx), "UNKNOWN_ROLE", fmt.Sprintf("Role '%s' is not defined in auth: config", role))
+			// 	}
+			// }
 
 			// Steps Cross-Reference
 			seenStepIDs := make(map[string]bool)

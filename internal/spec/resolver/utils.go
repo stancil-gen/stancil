@@ -12,10 +12,6 @@ import (
 
 // ─── ResolvedParam / ResolvedReturn helpers ───────────────────────────────────
 
-func ctxParam() spec.ResolvedParam {
-	return spec.ResolvedParam{Name: "ctx", Type: spec.TypeDescriptor{GoType: "context.Context"}}
-}
-
 func uuidParam(name string) spec.ResolvedParam {
 	return spec.ResolvedParam{Name: name, Type: spec.TypeDescriptor{Kind: spec.TypeUUID, GoType: "uuid.UUID"}}
 }
@@ -36,10 +32,6 @@ func slicePtrParam(name, typeName string) spec.ResolvedParam {
 
 func primitiveParam(name, goType string) spec.ResolvedParam {
 	return spec.ResolvedParam{Name: name, Type: spec.TypeDescriptor{GoType: goType}}
-}
-
-func errReturn() spec.ResolvedReturn {
-	return spec.ResolvedReturn{Type: spec.TypeDescriptor{GoType: "error"}}
 }
 
 func ptrReturn(typeName string) spec.ResolvedReturn {
@@ -119,6 +111,22 @@ func singularize(s string) string {
 // "users" → "User", "orders" → "Order"
 func modelName(tableName string) string {
 	return toPascalCase(singularize(tableName))
+}
+
+// toErrorMessage converts PascalCase to lowercase space-separated.
+// "NotFound" → "not found", "EmailTaken" → "email taken"
+func toErrorMessage(s string) string {
+	var words []string
+	start := 0
+	runes := []rune(s)
+	for i := 1; i < len(runes); i++ {
+		if unicode.IsUpper(runes[i]) {
+			words = append(words, strings.ToLower(string(runes[start:i])))
+			start = i
+		}
+	}
+	words = append(words, strings.ToLower(string(runes[start:])))
+	return strings.Join(words, " ")
 }
 
 // parseDuration parses a Stencil duration string like "5m", "1h", "30s" into time.Duration.

@@ -1,0 +1,184 @@
+version: 1
+project: field-rules-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+
+types:
+  - name: Address
+    fields:
+      - name: street
+        type: str
+        required: true
+      - name: city
+        type: str
+        required: true
+      - name: state
+        type: str
+      - name: zip
+        type: str
+        rules:
+          - type: min_length
+            value: 5
+          - type: max_length
+            value: 10
+      - name: country
+        type: str
+        required: true
+        rules:
+          - type: min_length
+            value: 2
+          - type: max_length
+            value: 2
+
+  - name: ContactInfo
+    fields:
+      - name: phone
+        type: str
+      - name: email
+        type: str
+        rules:
+          - type: email
+      - name: website
+        type: str
+        nullable: true
+
+tables:
+  - name: customers
+    fields:
+      - name: first_name
+        type: str
+        required: true
+        rules:
+          - type: min_length
+            value: 1
+          - type: max_length
+            value: 100
+      - name: last_name
+        type: str
+        required: true
+      - name: email
+        type: str
+        required: true
+        unique: true
+        rules:
+          - type: email
+      - name: age
+        type: int
+        nullable: true
+        rules:
+          - type: min
+            value: 0
+          - type: max
+            value: 150
+      - name: password_hash
+        type: str
+        required: true
+        private: true
+      - name: address
+        type: Address
+        nullable: true
+      - name: contact
+        type: ContactInfo
+      - name: tier
+        type: enum
+        values: [free, basic, premium, enterprise]
+        default: free
+      - name: notes
+        type: str
+        nullable: true
+    queries:
+      - find_by: [email]
+        returns: single
+      - exists: [email]
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: EMAIL_TAKEN
+        name: EmailTaken
+
+resources:
+  - group: CustomerAPIs
+    base_path: /customers
+    apis:
+      - name: CreateCustomer
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: CreateCustomerRequest
+            fields:
+              - name: first_name
+                type: str
+                required: true
+              - name: last_name
+                type: str
+                required: true
+              - name: email
+                type: str
+                required: true
+              - name: password
+                type: str
+                required: true
+              - name: age
+                type: int
+          response:
+            name: CreateCustomerResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: first_name
+                type: str
+              - name: last_name
+                type: str
+              - name: email
+                type: str
+              - name: tier
+                type: str
+              - name: full_name
+                type: str
+                compute: true
+        steps:
+          - id: writeCustomer
+            fatal: true
+            touch:
+              table: customers
+              op: create
+
+      - name: GetCustomer
+        method: GET
+        path: /:id
+        dtos:
+          request:
+            name: GetCustomerRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+          response:
+            name: GetCustomerResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: first_name
+                type: str
+              - name: last_name
+                type: str
+              - name: email
+                type: str
+              - name: tier
+                type: str
+              - name: full_name
+                type: str
+                compute: true
+        steps:
+          - id: fetchCustomer
+            fatal: true
+            touch:
+              table: customers
+              op: get

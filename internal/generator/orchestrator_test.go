@@ -28,7 +28,7 @@ func TestOrchestrator_ParallelSuccess(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register(&MockGenerator{id: "mock.success", shouldError: false})
 
-	emit := emitter.NewEmitter("testdata/out", "hash123")
+	emit := emitter.NewEmitter("testdata/out", ".", "hash123")
 	orch := NewOrchestrator(reg, emit)
 
 	dagPlan := &plan.Plan{
@@ -60,7 +60,7 @@ func TestOrchestrator_ParallelFailureHandling(t *testing.T) {
 	reg.Register(&MockGenerator{id: "mock.success", shouldError: false})
 	reg.Register(&MockGenerator{id: "mock.fail", shouldError: true})
 
-	emit := emitter.NewEmitter("testdata/out", "hash123")
+	emit := emitter.NewEmitter("testdata/out", ".", "hash123")
 	orch := NewOrchestrator(reg, emit)
 
 	dagPlan := &plan.Plan{
@@ -81,7 +81,7 @@ func TestOrchestrator_ParallelFailureHandling(t *testing.T) {
 func TestOrchestrator_UnregisteredTrap(t *testing.T) {
 	reg := NewRegistry()
 	
-	emit := emitter.NewEmitter("testdata/out", "hash123")
+	emit := emitter.NewEmitter("testdata/out", ".", "hash123")
 	orch := NewOrchestrator(reg, emit)
 
 	dagPlan := &plan.Plan{

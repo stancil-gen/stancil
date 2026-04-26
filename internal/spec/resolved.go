@@ -111,8 +111,19 @@ type ResolvedObject struct {
 	BulkCreate bool
 	Indexes    []ResolvedIndex
 
+	// Table errors — only populated when Kind == TableModel
+	Errors []ResolvedError
+
 	// Populated by ImportResolver in Level 1A
 	Imports map[Lang]ImportSet
+}
+
+// ResolvedError is a domain error declared on a table.
+type ResolvedError struct {
+	Code    string // "NOT_FOUND" — from YAML
+	Name    string // "NotFound" — from YAML
+	VarName string // "ErrCustomerNotFound" — derived
+	Message string // "customer: not found" — derived
 }
 
 // ResolvedField is a single field inside a ResolvedObject.
@@ -318,6 +329,7 @@ type ResolvedTouch struct {
 	// ── ServiceImpl enrichment ────────────────────────────────────────────────
 	// Populated on touches inside ServiceImpl methods.
 	// No flags — control flow is in the user's graph engine via When() conditions.
+	StepID      string // raw step ID from YAML, e.g. "validateCustomer"
 	ResultField string // context field name for this touch's output, e.g. "ChargePaymentOutput"
 	FatalError  bool   // if true, a non-nil error halts the method
 
@@ -392,6 +404,10 @@ type ResolvedMethod struct {
 	// ServiceImpl only: points to the MapperInterface for this API.
 	// Nil when ExecutionModel == Sequential and no mapper is declared.
 	MapperRef *ResolvedInterface
+
+	// ServiceImpl only: HTTP metadata for route/handler generation.
+	HTTPMethod string // "POST", "GET", etc.
+	HTTPPath   string // "/", "/:id"
 }
 
 // ResolvedDependency describes one constructor parameter / struct field.
@@ -413,6 +429,9 @@ type ResolvedImplementation struct {
 
 	// Constructor dependencies (struct fields + ctor params)
 	Dependencies []ResolvedDependency
+
+	// ServiceImpl only: base path for route registration (e.g. "/users")
+	BasePath string
 
 	// One entry per method
 	Methods []ResolvedMethod
@@ -466,11 +485,12 @@ type ResolvedConfigVar struct {
 // slices by Kind to find exactly what they need.
 type ResolvedSpec struct {
 	// Metadata
-	Project   string
-	Module    string
-	Lang      Lang
-	Framework Framework
-	DB        DBDriver
+	Project      string
+	Module       string
+	Lang         Lang
+	Framework    Framework
+	DB           DBDriver
+	ConfigLoader string // "env" | "viper-yaml" | "viper-json" — defaults to "env"
 
 	// Level 1 output
 	Objects []ResolvedObject
@@ -485,6 +505,10 @@ type ResolvedSpec struct {
 	Messaging *ResolvedMessaging
 	Auth      *ResolvedAuth
 	Config    []ResolvedConfigVar
+
+	// Raw AST externals — used by the external generator to read query params,
+	// headers, and other AST-only metadata not carried on ResolvedTouch.
+	RawExternals []ExternalAST
 }
 
 // ─── Query helpers ────────────────────────────────────────────────────────────

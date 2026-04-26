@@ -1,0 +1,21 @@
+package hooks
+
+import "{{ .Module }}/generated/lib/container"
+
+// Register is called from main.go after Configure() to register developer
+// implementations. Override any generated default by calling c.Provide() here:
+//
+//   Hook implementations:
+//     c.Provide(func() *order_ap_is.PlaceOrderHooks { return &PlaceOrderHooksImpl{} })
+//
+//   Mapper implementations (embed the default and override specific methods):
+//     c.Provide(func() order_ap_is.PlaceOrderMappers { return &MyPlaceOrderMappers{} })
+//
+//   Custom repository (e.g. add metrics to the default):
+//     c.Provide(func(db *gorm.DB) customers.CustomerRepository {
+//         return &InstrumentedCustomerRepository{DefaultCustomerRepositoryImpl: *customers.NewCustomerRepositoryImpl(db)}
+//     })
+//
+// Last registration wins — your Provide() here overrides the default from Configure().
+func Register(c *container.Container) {
+}

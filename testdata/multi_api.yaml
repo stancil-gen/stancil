@@ -1,0 +1,367 @@
+version: 1
+project: multi-api-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+  - name: INVENTORY_SERVICE_URL
+    type: str
+    required: true
+
+types:
+  - name: Money
+    fields:
+      - name: amount
+        type: decimal
+        required: true
+      - name: currency
+        type: str
+        required: true
+
+tables:
+  - name: users
+    fields:
+      - name: email
+        type: str
+        required: true
+        unique: true
+      - name: name
+        type: str
+        required: true
+      - name: role
+        type: enum
+        values: [buyer, seller, admin]
+        default: buyer
+    queries:
+      - find_by: [email]
+      - find_by: [role]
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: EMAIL_TAKEN
+        name: EmailTaken
+
+  - name: products
+    fields:
+      - name: seller_id
+        type: uuid
+        required: true
+      - name: title
+        type: str
+        required: true
+      - name: price
+        type: Money
+        required: true
+      - name: active
+        type: bool
+        default: true
+    queries:
+      - find_by: [seller_id]
+      - paginate: cursor
+        order_by:
+          - field: created_at
+            direction: desc
+
+  - name: orders
+    fields:
+      - name: buyer_id
+        type: uuid
+        required: true
+      - name: product_id
+        type: uuid
+        required: true
+      - name: quantity
+        type: int
+        required: true
+      - name: total
+        type: Money
+        required: true
+      - name: status
+        type: enum
+        values: [pending, confirmed, shipped, delivered, cancelled]
+        default: pending
+    queries:
+      - find_by: [buyer_id]
+      - find_by: [buyer_id, status]
+      - find_by: [product_id]
+      - soft_delete: true
+      - paginate: offset
+        order_by:
+          - field: created_at
+            direction: desc
+    soft_delete: true
+    states:
+      field: status
+      transitions:
+        - from: pending
+          to: confirmed
+        - from: confirmed
+          to: shipped
+        - from: shipped
+          to: delivered
+        - from: pending
+          to: cancelled
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: INVALID_TRANSITION
+        name: InvalidTransition
+
+externals:
+  - name: InventoryService
+    type: http
+    base_url: "${INVENTORY_SERVICE_URL}"
+    timeout: 5s
+    retry:
+      attempts: 2
+      backoff: exponential
+    calls:
+      - name: CheckStock
+        method: GET
+        path: /v1/stock/:product_id
+        response:
+          name: StockCheckResponse
+          fields:
+            - name: product_id
+              type: uuid
+            - name: available
+              type: int
+            - name: reserved
+              type: int
+
+      - name: ReserveStock
+        method: POST
+        path: /v1/stock/reserve
+        body:
+          name: ReserveStockRequest
+          fields:
+            - name: product_id
+              type: uuid
+              required: true
+            - name: quantity
+              type: int
+              required: true
+        response:
+          name: ReserveStockResponse
+          fields:
+            - name: reservation_id
+              type: uuid
+            - name: expires_at
+              type: timestamp
+
+resources:
+  # Group 1: User management
+  - group: UserAPIs
+    base_path: /users
+    apis:
+      - name: CreateUser
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: CreateUserRequest
+            fields:
+              - name: email
+                type: str
+                required: true
+              - name: name
+                type: str
+                required: true
+              - name: role
+                type: str
+          response:
+            name: UserResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: email
+                type: str
+              - name: name
+                type: str
+              - name: role
+                type: str
+        steps:
+          - id: writeUser
+            fatal: true
+            touch:
+              table: users
+              op: create
+
+      - name: GetUser
+        method: GET
+        path: /:id
+        dtos:
+          request:
+            name: GetUserRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+          response:
+            name: UserResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: email
+                type: str
+              - name: name
+                type: str
+              - name: role
+                type: str
+        steps:
+          - id: fetchUser
+            fatal: true
+            touch:
+              table: users
+              op: get
+
+  # Group 2: Product catalog (seller-facing)
+  - group: ProductAPIs
+    base_path: /products
+    apis:
+      - name: CreateProduct
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: CreateProductRequest
+            fields:
+              - name: title
+                type: str
+                required: true
+              - name: price_amount
+                type: decimal
+                required: true
+              - name: price_currency
+                type: str
+                required: true
+          response:
+            name: ProductResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: title
+                type: str
+              - name: active
+                type: bool
+        steps:
+          - id: writeProduct
+            fatal: true
+            touch:
+              table: products
+              op: create
+
+      - name: ListProducts
+        method: GET
+        path: /
+        dtos:
+          response:
+            name: ProductListResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: title
+                type: str
+              - name: active
+                type: bool
+        steps:
+          - id: listProducts
+            touch:
+              table: products
+              op: list
+
+  # Group 3: Orders — touches users, products, orders tables + external inventory service
+  - group: OrderAPIs
+    base_path: /orders
+    apis:
+      - name: PlaceOrder
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: PlaceOrderRequest
+            fields:
+              - name: product_id
+                type: uuid
+                required: true
+              - name: quantity
+                type: int
+                required: true
+          response:
+            name: PlaceOrderResponse
+            fields:
+              - name: order_id
+                type: uuid
+              - name: status
+                type: str
+              - name: reservation_id
+                type: uuid
+        steps:
+          - id: checkStock
+            fatal: true
+            touch:
+              external: InventoryService
+              method: CheckStock
+          - id: reserveStock
+            fatal: true
+            touch:
+              external: InventoryService
+              method: ReserveStock
+          - id: createOrder
+            fatal: true
+            touch:
+              table: orders
+              op: create
+
+      - name: GetOrder
+        method: GET
+        path: /:id
+        dtos:
+          request:
+            name: GetOrderRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+          response:
+            name: OrderResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: buyer_id
+                type: uuid
+              - name: product_id
+                type: uuid
+              - name: quantity
+                type: int
+              - name: status
+                type: str
+        steps:
+          - id: fetchOrder
+            fatal: true
+            touch:
+              table: orders
+              op: get
+
+      - name: ListMyOrders
+        method: GET
+        path: /mine
+        dtos:
+          response:
+            name: OrderSummaryResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: status
+                type: str
+              - name: quantity
+                type: int
+        steps:
+          - id: listOrders
+            touch:
+              table: orders
+              op: list

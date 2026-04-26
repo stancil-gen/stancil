@@ -1,0 +1,138 @@
+version: 1
+project: query-variants-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+
+tables:
+  - name: products
+    fields:
+      - name: name
+        type: str
+        required: true
+      - name: sku
+        type: str
+        required: true
+        unique: true
+      - name: price
+        type: decimal
+        required: true
+      - name: category
+        type: str
+      - name: status
+        type: enum
+        values: [draft, active, archived]
+        default: draft
+      - name: stock
+        type: int
+        default: 0
+    queries:
+      - find_by: [sku]
+        returns: single
+      - find_by: [category, status]
+      - exists: [sku]
+      - count: [status]
+      - bulk_create: true
+      - soft_delete: true
+      - paginate: cursor
+        order_by:
+          - field: created_at
+            direction: desc
+      - custom: GetTopSellingProducts
+        returns: many
+        sql: |
+          SELECT p.* FROM products p
+          JOIN order_items oi ON oi.product_id = p.id
+          GROUP BY p.id ORDER BY COUNT(oi.id) DESC LIMIT $1
+        params:
+          - name: limit
+            type: int
+    soft_delete: true
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: DUPLICATE_SKU
+        name: DuplicateSKU
+
+  - name: reviews
+    fields:
+      - name: product_id
+        type: uuid
+        required: true
+      - name: user_id
+        type: uuid
+        required: true
+      - name: rating
+        type: int
+        required: true
+      - name: body
+        type: str
+    queries:
+      - find_by: [product_id]
+      - find_by: [user_id]
+      - count: [product_id]
+      - paginate: offset
+        order_by:
+          - field: created_at
+            direction: desc
+        default_limit: 25
+
+resources:
+  - group: ProductAPIs
+    base_path: /products
+    apis:
+      - name: ListProducts
+        method: GET
+        path: /
+        dtos:
+          response:
+            name: ProductListResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: name
+                type: str
+              - name: price
+                type: decimal
+              - name: status
+                type: str
+        steps:
+          - id: listProducts
+            touch:
+              table: products
+              op: list
+
+      - name: GetProduct
+        method: GET
+        path: /:id
+        dtos:
+          request:
+            name: GetProductRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+          response:
+            name: ProductResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: name
+                type: str
+              - name: sku
+                type: str
+              - name: price
+                type: decimal
+              - name: status
+                type: str
+        steps:
+          - id: fetchProduct
+            fatal: true
+            touch:
+              table: products
+              op: get

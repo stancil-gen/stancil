@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"/generated/lib/errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/stencil-run/stencil-go/errors"
 )
 
 var validate = validator.New()

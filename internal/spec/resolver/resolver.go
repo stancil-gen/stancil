@@ -87,6 +87,9 @@ func (r *Resolver) Resolve() *spec.ResolvedSpec {
 	// Config
 	r.resolveConfig()
 
+	// Stash raw externals for generators that need AST-only metadata
+	r.res.RawExternals = r.ast.Externals
+
 	// Subsystems — deferred to Phase 2
 	// r.resolveMessaging()
 	// r.resolveAuth()
@@ -241,6 +244,10 @@ func (r *Resolver) resolveMetadata() {
 		r.res.Framework = spec.FrameworkEcho
 	case "spring":
 		r.res.Framework = spec.FrameworkSpring
+	}
+	r.res.ConfigLoader = r.ast.ConfigLoader
+	if r.res.ConfigLoader == "" {
+		r.res.ConfigLoader = "env"
 	}
 }
 

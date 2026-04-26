@@ -1,0 +1,34 @@
+package main
+
+import (
+	"log"
+
+	"github.com/gin-gonic/gin"
+
+	"{{ .Module }}/generated"
+	"{{ .Module }}/generated/config"
+	"{{ .Module }}/generated/lib/container"
+	"{{ .Module }}/hooks"
+{{ range .Groups }}	{{ .HandlerPkg }} "{{ .ImportPath }}"
+{{ end }})
+
+func main() {
+	cfg := config.Load()
+	c := container.New()
+
+	generated.Configure(c, cfg)  // wire.go — all infra, repos, hooks/mappers, services, handlers
+	hooks.Register(c)             // hooks/register.go — your overrides
+
+{{ range .Groups }}	var {{ .HandlerVar }} *{{ .HandlerPkg }}.{{ .HandlerType }}
+	c.MustResolve(&{{ .HandlerVar }})
+{{ end }}
+	r := gin.Default()
+	generated.RegisterRoutes(r{{ range .Groups }}, {{ .HandlerVar }}{{ end }})
+
+	port := cfg.Port
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("starting {{ .Module }} on :%s", port)
+	log.Fatal(r.Run(":" + port))
+}

@@ -16,7 +16,7 @@ type Engine struct {
 
 func NewEngine() *Engine {
 	return &Engine{
-		fm: template.FuncMap{},
+		fm: BuildFuncMap(),
 	}
 }
 

@@ -1,0 +1,155 @@
+version: 1
+project: state-machine-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+
+tables:
+  - name: tickets
+    fields:
+      - name: title
+        type: str
+        required: true
+      - name: description
+        type: str
+      - name: priority
+        type: enum
+        values: [low, medium, high, critical]
+        default: medium
+      - name: status
+        type: enum
+        values: [open, in_progress, review, resolved, closed]
+        default: open
+      - name: assignee_id
+        type: uuid
+        nullable: true
+    queries:
+      - find_by: [status]
+      - find_by: [assignee_id]
+      - paginate: offset
+        order_by:
+          - field: created_at
+            direction: desc
+        default_limit: 50
+    states:
+      field: status
+      transitions:
+        - from: open
+          to: in_progress
+        - from: in_progress
+          to: review
+        - from: review
+          to: resolved
+        - from: review
+          to: in_progress
+        - from: resolved
+          to: closed
+        - from: open
+          to: closed
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: INVALID_TRANSITION
+        name: InvalidTransition
+
+  - name: invoices
+    fields:
+      - name: amount
+        type: decimal
+        required: true
+      - name: currency
+        type: str
+        required: true
+      - name: status
+        type: enum
+        values: [draft, sent, paid, overdue, void]
+        default: draft
+    states:
+      field: status
+      transitions:
+        - from: draft
+          to: sent
+        - from: sent
+          to: paid
+        - from: sent
+          to: overdue
+        - from: overdue
+          to: paid
+        - from: draft
+          to: void
+        - from: sent
+          to: void
+        - from: overdue
+          to: void
+
+resources:
+  - group: TicketAPIs
+    base_path: /tickets
+    apis:
+      - name: CreateTicket
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: CreateTicketRequest
+            fields:
+              - name: title
+                type: str
+                required: true
+              - name: description
+                type: str
+              - name: priority
+                type: str
+          response:
+            name: TicketResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: title
+                type: str
+              - name: status
+                type: str
+              - name: priority
+                type: str
+        steps:
+          - id: writeTicket
+            fatal: true
+            touch:
+              table: tickets
+              op: create
+
+      - name: UpdateTicketStatus
+        method: PATCH
+        path: /:id/status
+        dtos:
+          request:
+            name: UpdateTicketStatusRequest
+            fields:
+              - name: id
+                type: uuid
+                required: true
+              - name: status
+                type: str
+                required: true
+          response:
+            name: TicketResponse
+            fields:
+              - name: id
+                type: uuid
+              - name: title
+                type: str
+              - name: status
+                type: str
+              - name: priority
+                type: str
+        steps:
+          - id: updateTicket
+            fatal: true
+            touch:
+              table: tickets
+              op: update

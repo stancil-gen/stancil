@@ -1,0 +1,209 @@
+version: 1
+project: multi-external-service
+lang: go
+framework: gin
+db: postgres
+
+config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+  - name: STRIPE_URL
+    type: str
+    required: true
+  - name: SENDGRID_URL
+    type: str
+    required: true
+  - name: SENDGRID_API_KEY
+    type: str
+    required: true
+  - name: GEOCODE_URL
+    type: str
+    required: true
+
+tables:
+  - name: orders
+    fields:
+      - name: user_id
+        type: uuid
+        required: true
+      - name: status
+        type: enum
+        values: [pending, paid, shipped]
+        default: pending
+      - name: total_cents
+        type: int
+        required: true
+
+externals:
+  # Bearer token auth, retry with specific status codes
+  - name: StripeClient
+    type: http
+    base_url: "${STRIPE_URL}"
+    auth: bearer_token
+    timeout: 10s
+    retry:
+      attempts: 3
+      backoff: exponential
+      on_status: [429, 502, 503]
+    calls:
+      - name: ChargeCard
+        method: POST
+        path: /v1/charges
+        body:
+          name: StripeChargeRequest
+          fields:
+            - name: amount
+              type: int
+              required: true
+            - name: currency
+              type: str
+              required: true
+            - name: source
+              type: str
+              required: true
+        response:
+          name: StripeChargeResponse
+          fields:
+            - name: id
+              type: str
+            - name: status
+              type: str
+            - name: paid
+              type: bool
+        errors:
+          - status: 402
+            error: CardDeclined
+          - status: 400
+            error: InvalidRequest
+
+      - name: RefundCharge
+        method: POST
+        path: /v1/refunds
+        body:
+          name: StripeRefundRequest
+          fields:
+            - name: charge_id
+              type: str
+              required: true
+            - name: amount
+              type: int
+        response:
+          name: StripeRefundResponse
+          fields:
+            - name: id
+              type: str
+            - name: status
+              type: str
+
+  # API key auth, no retry
+  - name: SendgridClient
+    type: http
+    base_url: "${SENDGRID_URL}"
+    auth: api_key
+    timeout: 5s
+    calls:
+      - name: SendEmail
+        method: POST
+        path: /v3/mail/send
+        body:
+          name: SendEmailRequest
+          fields:
+            - name: to
+              type: str
+              required: true
+            - name: subject
+              type: str
+              required: true
+            - name: body
+              type: str
+              required: true
+
+  # No auth, simple GET calls, no body
+  - name: GeocodeClient
+    type: http
+    base_url: "${GEOCODE_URL}"
+    timeout: 3s
+    retry:
+      attempts: 2
+      backoff: linear
+    calls:
+      - name: Lookup
+        method: GET
+        path: /v1/geocode
+        response:
+          name: GeocodeResult
+          fields:
+            - name: lat
+              type: decimal
+            - name: lng
+              type: decimal
+            - name: formatted_address
+              type: str
+
+resources:
+  - group: PaymentAPIs
+    base_path: /payments
+    apis:
+      - name: ProcessPayment
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: ProcessPaymentRequest
+            fields:
+              - name: order_id
+                type: uuid
+                required: true
+              - name: source_token
+                type: str
+                required: true
+          response:
+            name: ProcessPaymentResponse
+            fields:
+              - name: charge_id
+                type: str
+              - name: status
+                type: str
+        steps:
+          - id: lookupOrder
+            fatal: true
+            touch:
+              table: orders
+              op: get
+          - id: chargeCard
+            fatal: true
+            touch:
+              external: StripeClient
+              method: ChargeCard
+          - id: sendReceipt
+            fatal: false
+            touch:
+              external: SendgridClient
+              method: SendEmail
+
+      - name: RefundPayment
+        method: POST
+        path: /refund
+        dtos:
+          request:
+            name: RefundPaymentRequest
+            fields:
+              - name: charge_id
+                type: str
+                required: true
+              - name: amount
+                type: int
+          response:
+            name: RefundPaymentResponse
+            fields:
+              - name: refund_id
+                type: str
+              - name: status
+                type: str
+        steps:
+          - id: refundCharge
+            fatal: true
+            touch:
+              external: StripeClient
+              method: RefundCharge

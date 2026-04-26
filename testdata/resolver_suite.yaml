@@ -8,16 +8,7 @@ config:
   - name: DATABASE_URL
     type: str
     required: true
-  - name: REDIS_URL
-    type: str
-    required: true
-  - name: JWT_SECRET
-    type: str
-    required: true
   - name: STRIPE_URL
-    type: str
-    required: true
-  - name: KAFKA_BROKER
     type: str
     required: true
 
@@ -61,6 +52,7 @@ tables:
         default: active
     queries:
       - find_by: [email]
+        returns: single
       - find_by: [status]
       - soft_delete: true
       - paginate: offset
@@ -68,7 +60,11 @@ tables:
           - field: created_at
             direction: desc
     soft_delete: true
-    errors: [NotFound, EmailTaken]
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: EMAIL_TAKEN
+        name: EmailTaken
 
   - name: orders
     fields:
@@ -92,33 +88,11 @@ tables:
           - field: created_at
             direction: desc
     soft_delete: true
-    errors: [NotFound, InvalidTransition]
-
-transactions:
-  - name: PlaceOrder
-    type: local
-    steps:
-      - name: CreateOrder
-        sql: |
-          INSERT INTO orders (user_id, total, status)
-          VALUES ($1, $2, 'pending') RETURNING id
-        params:
-          - name: user_id
-            type: uuid
-          - name: total
-            type: decimal
-      - name: DeductInventory
-        sql: |
-          UPDATE inventory
-          SET quantity = quantity - $1
-          WHERE product_id = $2 AND quantity >= $1
-        params:
-          - name: quantity
-            type: int
-          - name: product_id
-            type: uuid
-        error_if_rows: 0
-        error: InsufficientStock
+    errors:
+      - code: NOT_FOUND
+        name: NotFound
+      - code: INVALID_TRANSITION
+        name: InvalidTransition
 
 externals:
   - name: StripeClient
@@ -159,42 +133,9 @@ externals:
           - status: 429
             error: RateLimited
 
-messaging:
-  broker: kafka
-  brokers: ["${KAFKA_BROKER}"]
-  producers:
-    - topic: user.created
-      event: UserCreated
-      key: user_id
-    - topic: order.placed
-      event: OrderPlaced
-      key: order_id
-  consumers:
-    - topic: payment.completed
-      event: PaymentCompleted
-      group: orders-service
-      handler: OnPaymentCompleted
-
-cache:
-  provider: redis
-  url: "${REDIS_URL}"
-  prefix: orders-svc
-  interfaces:
-    - name: UserCache
-      key_template: "user:{id}"
-      value_type: UserResponse
-      default_ttl: 5m
-      methods: [Get, Set, Delete, Invalidate]
-
-auth:
-  provider: jwt
-  expiry: 24h
-  roles: [admin, user]
-
 resources:
   - group: UserAPIs
     base_path: /users
-    auth: jwt
     apis:
       - name: CreateUser
         method: POST
@@ -229,14 +170,10 @@ resources:
             touch:
               table: users
               op: create
-          - id: notifyCreated
-            touch:
-              message: UserCreated
 
       - name: GetUser
         method: GET
         path: /:id
-        auth: jwt
         dtos:
           request:
             name: GetUserRequest
@@ -264,12 +201,10 @@ resources:
 
   - group: OrderAPIs
     base_path: /orders
-    auth: jwt
     apis:
       - name: PlaceOrder
         method: POST
         path: /
-        auth: jwt
         dtos:
           request:
             name: PlaceOrderRequest
@@ -291,7 +226,3 @@ resources:
             touch:
               external: StripeClient
               method: ChargeCard
-          - id: placeOrderTx
-            fatal: true
-            touch:
-              transaction: PlaceOrder

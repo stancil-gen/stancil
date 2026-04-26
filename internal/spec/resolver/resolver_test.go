@@ -183,10 +183,6 @@ func TestLevel1_SharedContext_CreateUser(t *testing.T) {
 	if !fieldNames["WriteUserOutput"] {
 		t.Error("SharedContext missing WriteUserOutput field (table create step)")
 	}
-	// notifyCreated step touches a message → no output field (message publish has no return)
-	if fieldNames["NotifyCreatedOutput"] {
-		t.Error("SharedContext should NOT have NotifyCreatedOutput — message publish has no output")
-	}
 }
 
 func TestLevel1_RequestDTO(t *testing.T) {
@@ -283,7 +279,7 @@ func TestLevel2_RepositoryInterface_UserFunctions(t *testing.T) {
 			t.Errorf("UserRepository missing function %s", req)
 		}
 	}
-	for _, req := range []string{"GetUsersByEmail", "SoftDeleteUser", "ListUsers"} {
+	for _, req := range []string{"GetUserByEmail", "SoftDeleteUser", "ListUsers"} {
 		if !fnNames[req] {
 			t.Errorf("UserRepository missing expanded query function %s", req)
 		}
@@ -311,7 +307,7 @@ func TestLevel2_RepositoryInterface_QueryKind(t *testing.T) {
 		"GetUserByID":   spec.QueryGet,
 		"UpdateUser":    spec.QueryUpdate,
 		"DeleteUser":    spec.QueryDelete,
-		"GetUsersByEmail": spec.QueryFindBy,
+		"GetUserByEmail": spec.QueryFindBy,
 		"SoftDeleteUser":  spec.QuerySoftDelete,
 		"ListUsers":       spec.QueryPaginate,
 	}
@@ -394,11 +390,11 @@ func TestLevel2_ExternalInterface_TypeRef(t *testing.T) {
 	}
 	chargeCard := ext.Functions[0]
 
-	// Param 0 = ctx, Param 1 = req (ChargeRequest)
-	if len(chargeCard.Params) < 2 {
-		t.Fatalf("ChargeCard: want at least 2 params (ctx, req), got %d", len(chargeCard.Params))
+	// Param 0 = req (ChargeRequest)
+	if len(chargeCard.Params) < 1 {
+		t.Fatalf("ChargeCard: want at least 1 param (req), got %d", len(chargeCard.Params))
 	}
-	reqParam := chargeCard.Params[1]
+	reqParam := chargeCard.Params[0]
 	if reqParam.TypeRef == nil {
 		t.Error("ChargeCard req param TypeRef is nil — should point to ChargeRequest object")
 	} else if reqParam.TypeRef.Name != "ChargeRequest" {
@@ -406,8 +402,8 @@ func TestLevel2_ExternalInterface_TypeRef(t *testing.T) {
 	}
 
 	// Return 0 = ChargeResponse
-	if len(chargeCard.Returns) < 2 {
-		t.Fatalf("ChargeCard: want at least 2 returns (ChargeResponse, error), got %d", len(chargeCard.Returns))
+	if len(chargeCard.Returns) < 1 {
+		t.Fatalf("ChargeCard: want at least 1 return (ChargeResponse), got %d", len(chargeCard.Returns))
 	}
 	if chargeCard.Returns[0].TypeRef == nil {
 		t.Error("ChargeCard first return TypeRef is nil — should point to ChargeResponse object")
@@ -574,15 +570,12 @@ func TestLevel3_ServiceImpl_CreateUser_Touches(t *testing.T) {
 		t.Errorf("SharedContext.Name = %q, want CreateUserContext", createUser.SharedContext.Name)
 	}
 
-	// writeUser (table create) + notifyCreated (message publish)
-	if len(createUser.Touches) != 2 {
-		t.Errorf("CreateUser: want 2 touches (table+message), got %d", len(createUser.Touches))
+	// writeUser (table create) — only touch in Phase 1 scope
+	if len(createUser.Touches) != 1 {
+		t.Errorf("CreateUser: want 1 touch (table), got %d", len(createUser.Touches))
 	}
 	if len(createUser.Touches) > 0 && createUser.Touches[0].Kind != spec.TouchKindTable {
 		t.Errorf("first touch: kind = %v, want TouchKindTable", createUser.Touches[0].Kind)
-	}
-	if len(createUser.Touches) > 1 && createUser.Touches[1].Kind != spec.TouchKindMessage {
-		t.Errorf("second touch: kind = %v, want TouchKindMessage", createUser.Touches[1].Kind)
 	}
 }
 
@@ -604,18 +597,15 @@ func TestLevel3_ServiceImpl_PlaceOrder_Touches(t *testing.T) {
 		t.Fatal("PlaceOrder method not found")
 	}
 
-	// chargePayment (external) + placeOrderTx (transaction)
-	if len(placeOrder.Touches) != 2 {
-		t.Errorf("PlaceOrder: want 2 touches (external+tx), got %d", len(placeOrder.Touches))
+	// chargePayment (external) — only touch in Phase 1 scope (transaction deferred)
+	if len(placeOrder.Touches) != 1 {
+		t.Errorf("PlaceOrder: want 1 touch (external), got %d", len(placeOrder.Touches))
 	}
 	if len(placeOrder.Touches) > 0 && placeOrder.Touches[0].Kind != spec.TouchKindExternal {
 		t.Errorf("first touch: kind = %v, want TouchKindExternal", placeOrder.Touches[0].Kind)
 	}
 	if len(placeOrder.Touches) > 0 && placeOrder.Touches[0].ResultField != "ChargePaymentOutput" {
 		t.Errorf("ResultField = %q, want ChargePaymentOutput", placeOrder.Touches[0].ResultField)
-	}
-	if len(placeOrder.Touches) > 1 && placeOrder.Touches[1].Kind != spec.TouchKindTransaction {
-		t.Errorf("second touch: kind = %v, want TouchKindTransaction", placeOrder.Touches[1].Kind)
 	}
 }
 

@@ -106,6 +106,16 @@ func buildTableModel(t spec.TableAST, lang spec.Lang, db spec.DBDriver) spec.Res
 		})
 	}
 
+	// Table error declarations
+	for _, e := range t.Errors {
+		obj.Errors = append(obj.Errors, spec.ResolvedError{
+			Code:    e.Code,
+			Name:    e.Name,
+			VarName: "Err" + name + e.Name,
+			Message: toSnakeCase(name) + ": " + toErrorMessage(e.Name),
+		})
+	}
+
 	// Derive indexes from find_by queries
 	for _, q := range t.Queries {
 		if len(q.FindBy) > 0 {

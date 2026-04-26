@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -29,7 +30,10 @@ func NewOrchestrator(r *Registry, e *emitter.Emitter) *Orchestrator {
 // Run executes Topographical Tier batches sequentially, but executes the target Generation Nodes strictly concurrently!
 func (o *Orchestrator) Run(specContext *spec.ResolvedSpec, dagPlan *plan.Plan) error {
 	
-	// Preload native Runtime Engine explicitly bypassing plugins natively!
+	// Preload native runtime library — rewrite inter-package imports to use the project's module path.
+	libModulePath := "github.com/stencil-run/stencil-go"
+	targetLibPath := specContext.Module + "/generated/lib"
+
 	err := fs.WalkDir(lib.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -38,15 +42,18 @@ func (o *Orchestrator) Run(specContext *spec.ResolvedSpec, dagPlan *plan.Plan) e
 			return nil
 		}
 
-		if path == "embed.go" || path == "." {
-			return nil 
+		if path == "embed.go" || path == "." || path == "go.mod" || path == "go.sum" {
+			return nil
 		}
 
 		content, err := fs.ReadFile(lib.FS, path)
 		if err != nil {
 			return err
 		}
-		
+
+		// Rewrite imports: github.com/stencil-run/stencil-go/errors → {module}/generated/lib/errors
+		content = bytes.ReplaceAll(content, []byte(libModulePath), []byte(targetLibPath))
+
 		o.emitter.Stage(emitter.File{Path: "lib/" + path, Content: content})
 		return nil
 	})
@@ -97,7 +104,11 @@ func (o *Orchestrator) Run(specContext *spec.ResolvedSpec, dagPlan *plan.Plan) e
 		// Safely funnel successful concurrent outputs sequentially into the Emitter buffer!
 		for files := range fileChan {
 			for _, f := range files {
-				o.emitter.Stage(f)
+				if f.Scaffold {
+					o.emitter.StageScaffold(f)
+				} else {
+					o.emitter.Stage(f)
+				}
 			}
 		}
 	}

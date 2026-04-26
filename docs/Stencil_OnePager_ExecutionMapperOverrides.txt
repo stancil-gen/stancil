@@ -1,0 +1,225 @@
+  STENCIL    API Execution Model · Mapper Defaults · Interface Overrides    v1.0 · April 2026
+
+Three changes to the core architecture
+(1) API execution flows are DAGs, not flat lists — steps run in parallel where possible, with conditions controlling branching. (2) Mappers between steps get generated default implementations — developer embeds the default and overrides only what changes. (3) Every generated type gets an interface — developer registers a custom implementation and the container picks it up automatically via last-registration-wins.
+
+1. DAG-Based API Execution
+Real API flows are not sequential — steps run in parallel, branch on conditions, and merge at response. The flat touches: list is replaced by a steps: declaration in the spec and a developer-written graph that expresses the topology.
+
+1.1  What changes in the DSL
+Steps declare what infra calls exist. The graph (developer code) declares when and in what order they run.
+
+apis:
+  - name: ProcessOrder
+    steps:
+      - id: validateUser
+        touch: {external: UserServiceClient, method: GetUser}
+        fatal: true          # error aborts entire flow
+      - id: checkInventory
+        touch: {table: inventory, op: get}
+        fatal: true
+      - id: chargePayment
+        touch: {external: StripeClient, method: ChargeCard}
+        fatal: true
+      - id: createOrder
+        touch: {transaction: PlaceOrder}
+        fatal: true
+      - id: notifyUser
+        touch: {message: OrderConfirmed}
+        fatal: false         # non-fatal — failure does not abort
+
+1.2  What the tool generates
+
+Generated file
+Contents
+context.go
+ProcessOrderContext struct — Request field, one Input + Output pair per step, Response field
+steps.go
+Typed ValidateUserInput/Output, CheckInventoryInput/Output etc. — one pair per step
+mappers.go
+ProcessOrderMappers interface + DefaultProcessOrderMappers with generated default implementations
+service.go
+Executor that calls graph.Execute() with a StepFn map — one closure per step, each calls mapper then infra
+
+1.3  Developer writes the graph
+The graph is business logic — the tool cannot infer it. Developer expresses topology using the stencil-go Graph API.
+
+// hooks/order/processorder.graph.go
+func (h *ProcessOrderHooks) BuildGraph() *stencil.Graph {
+    return stencil.NewGraph().
+        // validateUser and checkInventory run in parallel
+        Parallel("validateUser", "checkInventory").
+
+        // reserveInventory only runs if inventory is sufficient
+        Then("reserveInventory").
+        When(func(ctx context.Context, shared *ProcessOrderContext) bool {
+            return shared.CheckInventoryOutput.Item.Quantity >= shared.Request.Quantity
+        }).
+
+        // chargePayment waits for both validateUser AND reserveInventory
+        After("validateUser", "reserveInventory").
+        Then("chargePayment").
+
+        Then("createOrder").
+        Then("notifyUser").
+        Respond()
+}
+
+Graph API — stencil-go runtime
+Parallel(ids...) — run these steps concurrently. Then(id) — run next in sequence. After(ids...) — wait for all listed steps before proceeding. When(fn) — condition gate, step skipped if returns false. Respond() — signals end of graph. The runtime executor handles goroutines, WaitGroups, error propagation, and non-fatal step handling.
+
+2. Generated Mapper Defaults
+Every step needs an input built from previous step outputs and the original request. The tool generates a default implementation using name-and-type field matching. Developer embeds the default and overrides only the methods it cannot infer.
+
+2.1  How the tool infers defaults
+
+Case
+What tool generates
+Field exists on Request with same name + type
+Maps directly: StepInput.UserID = shared.Request.UserID
+Field exists on a previous StepOutput with same name + type
+Maps from output: StepInput.UserID = shared.PrevStepOutput.UserID
+Field can be derived by naming convention
+Maps with conversion: user_id → UserID, amount_cents → AmountCents
+Cannot be inferred (cross-step data transformation)
+Generates MUST_OVERRIDE — returns descriptive error explaining what is needed
+
+2.2  Generated interface and default implementation
+
+// generated — ProcessOrderMappers interface
+type ProcessOrderMappers interface {
+    MapValidateUserInput(ctx, shared) (*ValidateUserInput, error)
+    MapChargePaymentInput(ctx, shared) (*ChargePaymentInput, error)
+    MapResponse(ctx, shared) (*ProcessOrderResponse, error)
+}
+
+// generated — DefaultProcessOrderMappers
+func (d *Default) MapValidateUserInput(ctx, shared) (*ValidateUserInput, error) {
+    return &ValidateUserInput{UserID: shared.Request.UserID}, nil
+    // INFERRED: Request.UserID → ValidateUserInput.UserID (same name + type)
+}
+
+func (d *Default) MapChargePaymentInput(ctx, shared) (*ChargePaymentInput, error) {
+    // MUST OVERRIDE: CustomerID requires ValidateUserOutput.User.StripeCustomerID
+    // — cannot be inferred at generation time
+    return nil, errors.NewUnprocessable("MapChargePaymentInput must be overridden")
+}
+
+2.3  Developer overrides only what is needed
+
+// hooks/order/processorder.mappers.go
+type ProcessOrderMapperImpl struct {
+    DefaultProcessOrderMappers   // embed — all inferred defaults for free
+}
+
+// Only override the MUST_OVERRIDE method
+func (m *ProcessOrderMapperImpl) MapChargePaymentInput(
+    ctx context.Context, shared *ProcessOrderContext,
+) (*ChargePaymentInput, error) {
+    return &ChargePaymentInput{
+        CustomerID: shared.ValidateUserOutput.User.StripeCustomerID,
+        Amount:     shared.Request.Amount,
+    }, nil
+}
+
+3. Interfaces Everywhere — Override Any Generated Type
+Every generated concrete type has an interface. wire.go registers the default. hooks/register.go registers the override. The container uses last-registration-wins — developer override automatically replaces the default with zero changes to generated services.
+
+3.1  The pattern — every generated type
+
+Generated type
+Interface
+Default implementation
+Repository
+UsersRepository
+DefaultUsersRepository — sqlc queries
+External client
+StripeClient
+DefaultStripeClient — HTTP + retry
+Cache
+UserCache
+DefaultUserCache — Redis + key template
+Mapper
+ProcessOrderMappers
+DefaultProcessOrderMappers — inferred mappings
+Producer
+Producer
+DefaultProducer — Kafka writer
+Transaction
+PlaceOrderTx
+DefaultPlaceOrderTx — RunTx wrapper
+
+3.2  Override flow — add metrics to repository
+
+// hooks/user/repository.go
+type InstrumentedUsersRepository struct {
+    DefaultUsersRepository   // embed — all 8 methods work by default
+    metrics *Metrics
+}
+
+// Override only CreateUser to add latency tracking
+func (r *InstrumentedUsersRepository) CreateUser(
+    ctx context.Context, params CreateUserParams,
+) (*User, error) {
+    start := time.Now()
+    user, err := r.DefaultUsersRepository.CreateUser(ctx, params)
+    r.metrics.RecordDBLatency("CreateUser", time.Since(start))
+    return user, err
+}
+
+// Return interface type — container key is UsersRepository, not *InstrumentedImpl
+func NewInstrumentedUsersRepository(db *sql.DB, m *Metrics) UsersRepository {
+    return &InstrumentedUsersRepository{
+        DefaultUsersRepository: *NewDefaultUsersRepository(db), metrics: m,
+    }
+}
+
+3.3  Container wiring — last registration wins
+
+// generated/wire.go — registers defaults first
+c.Provide(func(db *sql.DB) UsersRepository {
+    return NewDefaultUsersRepository(db)
+})
+
+// hooks/register.go — developer override registered after
+c.Provide(func(db *sql.DB, m *Metrics) UsersRepository {
+    return NewInstrumentedUsersRepository(db, m)
+})
+
+// Container resolves UsersRepository → InstrumentedUsersRepository
+// All generated services that depend on UsersRepository get the override.
+// No changes to generated services needed.
+
+Last-registration-wins rule
+wire.Register(c) always runs before hooks.Register(c) in main.go. For any interface registered by both, the hooks registration overwrites the wire registration. The container resolves the interface to the developer's implementation. This is the complete override mechanism — no annotations, no configuration, just registration order.
+
+4. Complete Picture — What Developer Writes
+
+Concern
+Developer writes
+When
+Step topology
+BuildGraph() — Parallel, Then, After, When
+Always — topology is business logic, cannot be inferred
+Step input mapping
+Embed Default, override MUST_OVERRIDE methods only
+Only for steps where default inference fails
+Response mapping
+Embed Default, override MapResponse if needed
+Only if computed fields or cross-step data needed
+Custom repo behaviour
+Embed Default, override specific methods, register in hooks
+Only when default sqlc impl is insufficient
+Custom infra behaviour
+Implement interface, register in hooks/register.go
+Only when generated default does not fit
+Business logic hooks
+BeforeStep, AfterStep hooks on the hooks struct
+For side effects, flag setting, data enrichment
+Nothing
+Do nothing — all defaults work
+Happy path — most APIs need no overrides
+
+The design principle
+Generated defaults handle the mechanical case. Developer overrides handle the exceptions. The interface pattern ensures overrides are type-safe and automatically injected. The developer never edits generated files — they only add files to hooks/.
+

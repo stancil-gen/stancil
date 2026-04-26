@@ -8,6 +8,7 @@ type SpecAST struct {
 	Lang          string             `yaml:"lang"`
 	Framework     string             `yaml:"framework"`
 	DB            string             `yaml:"db"`
+	ConfigLoader  string             `yaml:"config_loader"` // "env" (default) | "viper-yaml" | "viper-json"
 	Config        []ConfigVarAST     `yaml:"config"`
 	Tables        []TableAST         `yaml:"tables"`
 	Types         []CustomTypeAST    `yaml:"types"`
@@ -46,7 +47,12 @@ type TableAST struct {
 	BulkCreate  bool              `yaml:"bulk_create"`
 	States      *StateMachineAST  `yaml:"states"`
 	DTOs        *TableDTOAST      `yaml:"dtos"`
-	Errors      []string          `yaml:"errors"`
+	Errors      []TableErrorAST   `yaml:"errors"`
+}
+
+type TableErrorAST struct {
+	Code string `yaml:"code"` // "NOT_FOUND"
+	Name string `yaml:"name"` // "NotFound"
 }
 
 type FieldAST struct {
@@ -122,14 +128,15 @@ type ParamAST struct {
 }
 
 type ExternalAST struct {
-	Name    string             `yaml:"name"`
-	Type    string             `yaml:"type"`
-	BaseURL string             `yaml:"base_url"`
-	Auth    string             `yaml:"auth"`
-	Timeout string             `yaml:"timeout"`
-	Retry   *RetryAST          `yaml:"retry"`
-	Headers map[string]string `yaml:"headers"`
-	Calls   []ExternalCallAST  `yaml:"calls"`
+	Name      string              `yaml:"name"`
+	Type      string              `yaml:"type"`
+	BaseURL   string              `yaml:"base_url"`
+	Auth      string              `yaml:"auth"`
+	AuthToken string              `yaml:"auth_token"` // e.g. "${STRIPE_SECRET_KEY}" — config var for bearer/api_key auth
+	Timeout   string              `yaml:"timeout"`
+	Retry     *RetryAST           `yaml:"retry"`
+	Headers   []ExternalHeaderAST `yaml:"headers"`
+	Calls     []ExternalCallAST   `yaml:"calls"`
 }
 
 type RetryAST struct {
@@ -140,12 +147,21 @@ type RetryAST struct {
 }
 
 type ExternalCallAST struct {
-	Name     string             `yaml:"name"`
-	Method   string             `yaml:"method"`
-	Path     string             `yaml:"path"`
-	Body     *ExternalBodyAST   `yaml:"body"`
-	Response *ExternalBodyAST   `yaml:"response"`
-	Errors   []ExternalErrorAST `yaml:"errors"`
+	Name        string              `yaml:"name"`
+	Method      string              `yaml:"method"`
+	Path        string              `yaml:"path"`
+	QueryParams []FieldAST          `yaml:"query_params"`
+	Headers     []ExternalHeaderAST `yaml:"headers"`
+	Body        *ExternalBodyAST    `yaml:"body"`
+	Response    *ExternalBodyAST    `yaml:"response"`
+	Errors      []ExternalErrorAST  `yaml:"errors"`
+}
+
+type ExternalHeaderAST struct {
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"`
+	Value    string `yaml:"value"`
+	Required bool   `yaml:"required"`
 }
 
 // ExternalBodyAST defines a request or response body inline in the external call.

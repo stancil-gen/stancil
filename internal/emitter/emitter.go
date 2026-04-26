@@ -11,26 +11,35 @@ import (
 )
 
 type File struct {
-	Path    string
-	Content []byte
+	Path     string
+	Content  []byte
+	Scaffold bool // if true, write to ScaffoldDir instead of OutputDir
 }
 
 type Emitter struct {
-	OutputDir string
-	Staged    []File
-	lockHash  string
+	OutputDir   string
+	ScaffoldDir string // project root — for main.go, go.mod, hooks/, config/
+	Staged      []File
+	Scaffold    []File // scaffold files — only written if they don't exist
+	lockHash    string
 }
 
-func NewEmitter(outDir, specHash string) *Emitter {
+func NewEmitter(outDir, scaffoldDir, specHash string) *Emitter {
 	return &Emitter{
-		OutputDir: outDir,
-		lockHash:  specHash,
+		OutputDir:   outDir,
+		ScaffoldDir: scaffoldDir,
+		lockHash:    specHash,
 	}
 }
 
 // Stage natively aggregates into local buffer matrices
 func (e *Emitter) Stage(f File) {
 	e.Staged = append(e.Staged, f)
+}
+
+// StageScaffold queues a file to be written to ScaffoldDir (only if it doesn't already exist)
+func (e *Emitter) StageScaffold(f File) {
+	e.Scaffold = append(e.Scaffold, f)
 }
 
 // Flush safely sweeps buffered boundaries identically utilizing protective permissions 
@@ -52,6 +61,17 @@ func (e *Emitter) Flush() error {
 	}
 
 	e.lockOutputDir()
+
+	// Write scaffold files (only if they don't already exist)
+	for _, f := range e.Scaffold {
+		fullPath := filepath.Join(e.ScaffoldDir, f.Path)
+		if _, err := os.Stat(fullPath); err == nil {
+			continue // file exists — don't overwrite
+		}
+		// scaffold write failures are non-fatal
+		_ = e.writeScaffoldFile(f)
+	}
+
 	return e.writeLockFile()
 }
 
@@ -68,6 +88,20 @@ func (e *Emitter) writeFile(f File) error {
 		}
 	}
 
+	return os.WriteFile(fullPath, f.Content, 0644)
+}
+
+func (e *Emitter) writeScaffoldFile(f File) error {
+	fullPath := filepath.Join(e.ScaffoldDir, f.Path)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return err
+	}
+	// Auto-format Go files
+	if strings.HasSuffix(f.Path, ".go") {
+		if formatted, err := imports.Process(fullPath, f.Content, nil); err == nil {
+			f.Content = formatted
+		}
+	}
 	return os.WriteFile(fullPath, f.Content, 0644)
 }
 
