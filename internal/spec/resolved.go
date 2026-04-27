@@ -24,51 +24,46 @@ const (
 // ─── TypeKind ────────────────────────────────────────────────────────────────
 
 // TypeKind is the language-agnostic canonical kind of a field type.
-// The ImportResolver maps Kind → import path. Generators map Kind → rendered type name.
+// LangPack maps Kind → rendered type name. Generators read Kind directly.
 type TypeKind int
 
 const (
 	TypeStr       TypeKind = iota
-	TypeInt                // int64
-	TypeUUID               // uuid.UUID
+	TypeInt                // int64 in Go, long in Java
+	TypeUUID               // uuid.UUID in Go, UUID in Java
 	TypeBool               // bool
-	TypeDecimal            // decimal.Decimal
-	TypeTimestamp          // time.Time
-	TypeDate               // time.Time (date only)
-	TypeJSON               // json.RawMessage
-	TypeEnum               // string + values
-	TypeCustom             // pointer to a generated struct
+	TypeDecimal            // decimal.Decimal in Go, BigDecimal in Java
+	TypeTimestamp          // time.Time in Go, LocalDateTime in Java
+	TypeDate               // time.Time (date only) in Go
+	TypeJSON               // json.RawMessage in Go, JsonNode in Java
+	TypeEnum               // string + values — enum type
+	TypeCustom             // pointer to a generated struct (Money, Address, etc.)
+	TypeAny                // interface{} in Go — fallback for truly dynamic types
 )
 
 // TypeDescriptor is the language-agnostic canonical type representation.
-// Resolvers populate it once; generators read GoType/JavaType to render.
+// No language strings — LangPack renders Kind+Nullable+CustomName at generator time.
 type TypeDescriptor struct {
 	Kind TypeKind
 
-	// Rendered type names
-	GoType   string // "string", "decimal.Decimal", "uuid.UUID", "*Money"
-	JavaType string // "String", "BigDecimal", "UUID", "Money"
+	// Nullability — language-agnostic. LangPack decides how to render (pointer, Option<T>, | null).
+	Nullable bool
 
-	// DB
-	DBType     string // "VARCHAR(255)", "NUMERIC", "UUID", "JSONB"
-	DBNullable bool
+	// IsList — true when this field holds a slice/array of the base type.
+	// LangPack renders as []*T (Go), T[] (TypeScript), List<T> (Java).
+	IsList bool
 
-	// Nullability — GoPointer is true when nullable=true or Kind==TypeCustom
-	GoPointer bool
+	// DB type — database-specific, not language-specific.
+	DBType string // "UUID", "VARCHAR(255)", "NUMERIC", "JSONB", "TIMESTAMP", "BOOLEAN"
 
-	// Metadata
-	IsCustom   bool
+	// Metadata for enum types.
 	IsEnum     bool
 	EnumValues []string
-}
 
-// ─── ImportSet ────────────────────────────────────────────────────────────────
-
-// ImportSet holds the sorted, deduplicated import paths for one target language.
-// Populated by ImportResolver after each resolver level.
-type ImportSet struct {
-	Lang  Lang
-	Paths []string
+	// CustomName is the type name when IsCustom is true.
+	// Example: "Money", "Address". Generators qualify with the correct package.
+	IsCustom   bool
+	CustomName string
 }
 
 // ─── ObjectKind ──────────────────────────────────────────────────────────────
@@ -84,8 +79,8 @@ const (
 	ExternalInput                       // from externals[*].calls[*].body
 	ExternalOutput                      // from externals[*].calls[*].response
 	TransactionParams                   // merged params across tx steps
-	StepInput                           // per-step typed input struct (GraphBased APIs)
-	StepOutput                          // per-step typed output struct (GraphBased APIs)
+	StepInput                           // per-step typed input struct (future)
+	StepOutput                          // per-step typed output struct (future)
 )
 
 // ─── Level 1: ResolvedObject ─────────────────────────────────────────────────
@@ -113,9 +108,6 @@ type ResolvedObject struct {
 
 	// Table errors — only populated when Kind == TableModel
 	Errors []ResolvedError
-
-	// Populated by ImportResolver in Level 1A
-	Imports map[Lang]ImportSet
 }
 
 // ResolvedError is a domain error declared on a table.
@@ -132,9 +124,9 @@ type ResolvedField struct {
 	DBColumn string // snake_case: "amount", "created_at", "user_id"
 
 	Type    TypeDescriptor
-	TypeRef *ResolvedObject // non-nil when Type.IsCustom == true
+	TypeRef *ResolvedObject // non-nil when Type.IsCustom == true (linked by linkTypeRefs)
 
-	// Constraints
+	// Constraints — language-agnostic. LangPack renders these as struct tags / decorators.
 	Required bool
 	Unique   bool
 	Nullable bool
@@ -142,15 +134,14 @@ type ResolvedField struct {
 	Default  interface{}
 	Compute  bool
 
+	// Validation rules — used by LangPack to generate field annotations.
+	Rules []ResolvedRule
+
 	// Enum values (only when Type.IsEnum == true)
 	Values []string
 
 	// Foreign key (only when this field is a FK)
 	FK *ResolvedForeignKey
-
-	// Pre-rendered struct tags — generator writes these verbatim
-	GoStructTag    string // `json:"amount" validate:"required,min=0"`
-	JavaAnnotation string // "@NotNull @DecimalMin(\"0\")"
 }
 
 type ResolvedForeignKey struct {
@@ -179,12 +170,12 @@ const (
 	ServiceInterface
 	CacheInterface
 	ExternalInterface
-	MapperInterface // per-APIAST: MapXxxInput per step + MapResponse
+	MapperInterface // per-API: MapXxxInput per step + MapResponse
 )
 
 // ─── Level 2: ResolvedInterface ──────────────────────────────────────────────
 
-// ResolvedInterface is the Level 2 output. Every Go interface the generators
+// ResolvedInterface is the Level 2 output. Every interface the generators
 // need to declare is represented as one ResolvedInterface.
 type ResolvedInterface struct {
 	Name string
@@ -193,14 +184,10 @@ type ResolvedInterface struct {
 
 	// Ordered list of method signatures
 	Functions []ResolvedFunction
-
-	// Populated by ImportResolver in Level 2A
-	Imports map[Lang]ImportSet
 }
 
 // ResolvedFunction is one method in an interface.
-// Generators render the language-specific signature from Name, Params, and Returns.
-// QueryKind is non-nil only for repository functions — tells the generator what GORM pattern to emit.
+// QueryKind is non-nil only for repository functions — tells the generator which DB pattern to emit.
 type ResolvedFunction struct {
 	Name      string
 	Params    []ResolvedParam
@@ -231,7 +218,7 @@ const (
 	TouchKindHTTPCall                  // ExternalImpl — HTTP call
 	TouchKindTxStep                    // TransactionImpl — one SQL step
 	TouchKindPublish                   // ServiceImpl — message publish
-	// ServiceImpl dispatch kinds (reuse same struct, distinguish by presence of refs)
+	// ServiceImpl dispatch kinds
 	TouchKindTable       // ServiceImpl touches a table via repo
 	TouchKindCache       // ServiceImpl touches a cache interface
 	TouchKindExternal    // ServiceImpl touches an external interface
@@ -264,7 +251,7 @@ const (
 	CacheOpInvalidate
 )
 
-// ─── ResolvedTouch — unified ─────────────────────────────────────────────────
+// ─── ResolvedTouch — unified infra interaction ────────────────────────────────
 
 // ResolvedTouch represents one infra interaction. The Kind field determines
 // which set of fields is populated. All other fields are zero values.
@@ -301,13 +288,16 @@ type ResolvedTouch struct {
 	ValueTypeRef *ResolvedObject
 	KeyParams    []ResolvedParam
 	KeyTemplate  string
-	KeyFunc      string // pre-computed: `fmt.Sprintf("user:%d", id)`
+	KeyFunc      string
 	DefaultTTL   time.Duration
 
 	// ── HTTPCall (ExternalImpl) ───────────────────────────────────────────────
 	HTTPMethod      string
 	PathTemplate    string
-	PathParams      []ResolvedParam
+	PathParams      []string        // extracted {placeholder} names from PathTemplate
+	QueryParamFields []ResolvedField // query params from external call spec
+	DynamicHeaders  []ResolvedField // per-request headers (Type != "")
+	StaticHeaders   map[string]string // fixed headers (Value != "")
 	RequestBodyRef  *ResolvedObject
 	ResponseBodyRef *ResolvedObject
 	StatusErrors    []ResolvedStatusError
@@ -315,6 +305,8 @@ type ResolvedTouch struct {
 	RetryBackoff    string
 	RetryOnStatus   []int
 	AuthKind        string
+	AuthConfigField string // config field name for auth token, e.g. "StripeSecretKey"
+	BaseURLField    string // config field name for base URL, e.g. "StripeUrl"
 	Timeout         time.Duration
 
 	// ── TxStep (TransactionImpl) ─────────────────────────────────────────────
@@ -327,46 +319,41 @@ type ResolvedTouch struct {
 	EventTypeRef *ResolvedObject
 
 	// ── ServiceImpl enrichment ────────────────────────────────────────────────
-	// Populated on touches inside ServiceImpl methods.
-	// No flags — control flow is in the user's graph engine via When() conditions.
 	StepID      string // raw step ID from YAML, e.g. "validateCustomer"
-	ResultField string // context field name for this touch's output, e.g. "ChargePaymentOutput"
+	ResultField string // context field name for this touch's output
 	FatalError  bool   // if true, a non-nil error halts the method
 
 	// Resolved infra refs for ServiceImpl dispatch
-	QueryRef           *ResolvedFunction       // the specific repo function to call
-	ExternalRef        *ResolvedInterface      // the external client interface
-	ExternalMethod     *ResolvedFunction       // the specific method on the external
-	CacheMethod        *ResolvedFunction       // Get, Set, Delete, or Invalidate
-	TransactionImplRef *ResolvedImplementation // pointer forward-declared below
+	QueryRef           *ResolvedFunction
+	ExternalRef        *ResolvedInterface
+	ExternalMethod     *ResolvedFunction
+	CacheMethod        *ResolvedFunction
+	TransactionImplRef *ResolvedImplementation
 }
 
 type ResolvedStatusError struct {
 	Status    int
-	ErrorName string // "CardDeclined" → generates sentinel error
+	ErrorName string
 }
 
 // ─── ExecutionModel ───────────────────────────────────────────────────────────
 
-// ExecutionModel tells the generator which service body pattern to render.
 type ExecutionModel int
 
 const (
-	Sequential ExecutionModel = iota // flat steps in order; renders flag/infra/hook pattern
-	GraphBased                       // developer writes BuildGraph(); renders graph.Execute() body
+	Sequential ExecutionModel = iota
+	GraphBased
 )
 
 // ─── ResolvedFieldMapping ────────────────────────────────────────────────────
 
-// ResolvedFieldMapping is one field-to-source mapping produced by resolveFieldMappings.
-// The Generator reads this to render the body of DefaultMapperImpl methods.
 type ResolvedFieldMapping struct {
-	MethodName   string // "MapValidateUserInput"
-	TargetField  string // "UserID" — field on the StepInput or ResponseDTO
-	SourcePath   string // "shared.Request.UserID" — where the value comes from
-	Inferred     bool   // true = default implementation can handle this
-	MustOverride bool   // true = no source found; default emits an error body
-	Reason       string // why it can't be inferred (used in generated comment)
+	MethodName   string
+	TargetField  string
+	SourcePath   string
+	Inferred     bool
+	MustOverride bool
+	Reason       string
 }
 
 // ─── Level 3: ResolvedImplementation ─────────────────────────────────────────
@@ -380,68 +367,54 @@ const (
 	CacheImpl
 	ExternalImpl
 	ExternalMockImpl
-	DefaultMapperImpl // generated field-matching default for MapperInterface
-	CacheMockImpl     // in-memory stub for CacheInterface
+	DefaultMapperImpl
+	CacheMockImpl
 )
 
 // ResolvedMethod is one method body inside a ResolvedImplementation.
 type ResolvedMethod struct {
 	FunctionName string
 
-	// The infra this method touches, in declaration order.
-	// Generator reads Kind on each touch to decide what ORM/HTTP code to render.
 	Touches []ResolvedTouch
 
-	// ServiceImpl only: the shared context type for this method.
-	SharedContext *ResolvedObject
-
-	// TransactionImpl only: pointer to the params object for the Execute() signature.
-	InputParamsRef *ResolvedObject
-
-	// ServiceImpl only: which execution body pattern to render.
+	// ServiceImpl only
+	SharedContext  *ResolvedObject
 	ExecutionModel ExecutionModel
+	MapperRef      *ResolvedInterface
+	HTTPMethod     string
+	HTTPPath       string
 
-	// ServiceImpl only: points to the MapperInterface for this API.
-	// Nil when ExecutionModel == Sequential and no mapper is declared.
-	MapperRef *ResolvedInterface
-
-	// ServiceImpl only: HTTP metadata for route/handler generation.
-	HTTPMethod string // "POST", "GET", etc.
-	HTTPPath   string // "/", "/:id"
+	// TransactionImpl only
+	InputParamsRef *ResolvedObject
 }
 
 // ResolvedDependency describes one constructor parameter / struct field.
 type ResolvedDependency struct {
-	FieldName string // Go struct field name: "db", "userCache", "hooks"
-	TypeName  string // Go type string: "*sql.DB", "*UserCache", "*PlaceOrderHooks"
-	Import    string // import path if needed: "database/sql"
+	FieldName string // struct field name: "db", "userCache", "hooks"
+	TypeName  string // type string (still language-specific here — generators use directly)
+	Import    string // import path if needed
 }
 
-// ResolvedImplementation is the Level 3 output. Every concrete struct the
-// generators need to write is represented as one ResolvedImplementation.
+// ResolvedImplementation is the Level 3 output.
 type ResolvedImplementation struct {
 	Name string
 	Path string
 	Kind ImplementationKind
 
-	// Which interface this satisfies
 	Implements *ResolvedInterface
 
-	// Constructor dependencies (struct fields + ctor params)
 	Dependencies []ResolvedDependency
 
-	// ServiceImpl only: base path for route registration (e.g. "/users")
+	// RepositoryImpl only: which database this repo connects to
+	Database *ResolvedDatabase
+
+	// ServiceImpl only
 	BasePath string
 
-	// One entry per method
 	Methods []ResolvedMethod
 
-	// DefaultMapperImpl only: field-to-source mappings produced by resolveFieldMappings.
-	// Generator reads these to render each MapXxxInput and MapResponse body.
+	// DefaultMapperImpl only
 	FieldMappings []ResolvedFieldMapping
-
-	// Populated by ImportResolver in Level 3A
-	Imports map[Lang]ImportSet
 }
 
 // ─── Subsystems ──────────────────────────────────────────────────────────────
@@ -474,9 +447,21 @@ type ResolvedAuth struct {
 
 type ResolvedConfigVar struct {
 	Name     string
-	GoType   string
+	YAMLType string // "str", "int", "bool" — LangPack renders to language type
 	Required bool
 	Default  interface{}
+}
+
+// ─── ResolvedDatabase ─────────────────────────────────────────────────────────
+
+// ResolvedDatabase is one resolved entry from the spec's `db:` block.
+type ResolvedDatabase struct {
+	Name      string   // identifier: "postgres", "primary", "analytics"
+	Driver    DBDriver // DBPostgres | DBMySQL | DBMongo
+	Framework string   // "gorm" | "sqlx" | "sqlc"
+	URLField  string   // PascalCase config field name, e.g. "DatabaseUrl"
+	TypeName  string   // Go named wrapper type: e.g. "PostgresDB" = Pascal(Name)+"DB"
+	FuncName  string   // MustOpen function suffix: e.g. "Postgres" → MustOpenPostgres
 }
 
 // ─── ResolvedSpec — the final output ─────────────────────────────────────────
@@ -489,8 +474,8 @@ type ResolvedSpec struct {
 	Module       string
 	Lang         Lang
 	Framework    Framework
-	DB           DBDriver
-	ConfigLoader string // "env" | "viper-yaml" | "viper-json" — defaults to "env"
+	Databases    []ResolvedDatabase // declared DB connections (from db: block)
+	ConfigLoader string // "env" | "viper-yaml" | "viper-json"
 
 	// Level 1 output
 	Objects []ResolvedObject
@@ -505,10 +490,6 @@ type ResolvedSpec struct {
 	Messaging *ResolvedMessaging
 	Auth      *ResolvedAuth
 	Config    []ResolvedConfigVar
-
-	// Raw AST externals — used by the external generator to read query params,
-	// headers, and other AST-only metadata not carried on ResolvedTouch.
-	RawExternals []ExternalAST
 }
 
 // ─── Query helpers ────────────────────────────────────────────────────────────

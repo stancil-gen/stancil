@@ -4,7 +4,6 @@ go 1.25.0
 
 require (
 	github.com/spf13/cobra v1.10.2
-	github.com/stencil-run/stencil-go v0.0.0-00010101000000-000000000000
 	golang.org/x/sync v0.20.0
 	golang.org/x/tools v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -19,5 +18,3 @@ require (
 	golang.org/x/mod v0.35.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
-
-replace github.com/stencil-run/stencil-go => ./lib

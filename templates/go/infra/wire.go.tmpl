@@ -2,11 +2,10 @@
 package {{ .Package }}
 
 import (
-	"{{ .Module }}/generated/lib/container"
+	"github.com/stancil-gen/stancil-go/container"
 	"{{ .Module }}/generated/config"
-{{ if .HasDB }}
+{{ if .DBConnections }}
 	"{{ .Module }}/generated/db"
-	"gorm.io/gorm"
 {{ end }}{{ if .Externals }}
 	"{{ .Module }}/generated/externals"
 {{ end }}
@@ -15,10 +14,10 @@ import (
 {{ end }})
 
 func Configure(c *container.Container, cfg *config.AppConfig) {
-{{ if .HasDB }}
-	// Database
-	c.Provide(func() *gorm.DB { return db.MustOpen(cfg) })
-
+{{ if .DBConnections }}
+	// Database connections — one provider per declared db: entry
+{{ range .DBConnections }}	c.Provide(func() *db.{{ .TypeName }} { return db.MustOpen{{ .FuncName }}(cfg) })
+{{ end }}
 {{ end }}{{ if .Externals }}
 	// External clients
 {{ range .Externals }}	c.Provide(func() *externals.{{ .ImplName }} { return externals.New{{ .ImplName }}(cfg) })

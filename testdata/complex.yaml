@@ -2,11 +2,18 @@ version: 1
 project: full-ecommerce
 lang: go
 framework: gin
-db: postgres
+db:
+  - name: postgres
+    driver: postgres
+    framework: gorm
+    url: ${DATABASE_URL}
 
 config:
-  - name: STRIPE_URL         
-    type: str  
+  - name: DATABASE_URL
+    type: str
+    required: true
+  - name: STRIPE_URL
+    type: str
     required: true
 
 types:

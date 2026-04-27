@@ -6,7 +6,10 @@ import (
 	"errors"
 	"time"
 {{ if .HasPagination }}
-	"{{ .Module }}/generated/lib/pagination"
+	"github.com/stancil-gen/stancil-go/pagination"
+{{ end }}
+{{ if .DBTypeName }}
+	"{{ .Module }}/generated/db"
 {{ end }}
 	"gorm.io/gorm"
 )
@@ -20,13 +23,18 @@ type {{ .InterfaceName }} interface {
 
 // {{ .ImplName }} implements {{ .InterfaceName }} using GORM.
 type {{ .ImplName }} struct {
-	db *gorm.DB
-}
+{{ if .DBTypeName }}	db *db.{{ .DBTypeName }}
+{{ else }}	db *gorm.DB
+{{ end }}}
 
 // New{{ .ImplName }} creates a new {{ .ImplName }}.
-func New{{ .ImplName }}(db *gorm.DB) *{{ .ImplName }} {
-	return &{{ .ImplName }}{db: db}
+{{ if .DBTypeName }}func New{{ .ImplName }}(d *db.{{ .DBTypeName }}) *{{ .ImplName }} {
+	return &{{ .ImplName }}{db: d}
 }
+{{ else }}func New{{ .ImplName }}(d *gorm.DB) *{{ .ImplName }} {
+	return &{{ .ImplName }}{db: d}
+}
+{{ end }}
 {{ range .Functions }}
 func (r *{{ $.ImplName }}) {{ .FuncName }}({{ .Params }}) {{ .Returns }} {
 {{- if eq .QueryKind "create" }}
@@ -76,7 +84,7 @@ func (r *{{ $.ImplName }}) {{ .FuncName }}({{ .Params }}) {{ .Returns }} {
 	err := r.db.WithContext(ctx).Model(&{{ .ModelName }}{}).
 		Where("{{ range $i, $c := .FilterClauses }}{{ if $i }} AND {{ end }}{{ $c.Column }} = ?{{ end }}"{{ range .FilterClauses }}, {{ .Param }}{{ end }}).
 		Count(&count).Error
-	return count, err
+	return int(count), err
 {{- else if eq .QueryKind "soft_delete" }}
 	return r.db.WithContext(ctx).Model(&{{ .ModelName }}{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 {{- else if eq .QueryKind "bulk_create" }}

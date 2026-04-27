@@ -4,8 +4,8 @@ package {{ .Package }}
 import (
 	"github.com/gin-gonic/gin"
 
-	"{{ .Module }}/generated/lib/handler"
-	"{{ .Module }}/generated/lib/errors"
+	"github.com/stancil-gen/stancil-go/handler"
+	"github.com/stancil-gen/stancil-go/errors"
 )
 
 type {{ .ImplName }}Handler struct {

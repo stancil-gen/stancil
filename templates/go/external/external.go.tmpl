@@ -14,7 +14,7 @@ import (
 {{ range .Imports }}	"{{ . }}"
 {{ end }}
 	"{{ .Module }}/generated/config"
-	"{{ .Module }}/generated/lib/httputil"
+	"github.com/stancil-gen/stancil-go/httputil"
 )
 
 // Blank imports to avoid unused-import errors when no query params use strconv,
