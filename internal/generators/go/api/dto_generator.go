@@ -7,7 +7,7 @@ import (
 
 	"stencil/internal/emitter"
 	"stencil/internal/generator"
-	"stencil/internal/generators/go/shared"
+	"stencil/internal/lang"
 	"stencil/internal/spec"
 	"stencil/internal/template"
 )
@@ -53,20 +53,29 @@ func (g *dtoGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File,
 
 	seen := map[string]bool{}
 	var structs []DTOStruct
+	importSeen := map[string]bool{}
 
 	for _, method := range impl.Methods {
 		// Request DTO
 		reqObj := ctx.Spec.ObjectByName(method.FunctionName + "Request")
 		if reqObj != nil && !seen[reqObj.Name] {
 			seen[reqObj.Name] = true
-			structs = append(structs, objectToDTOStruct(reqObj))
+			s, imps := objectToDTOStruct(reqObj, ctx.Lang)
+			structs = append(structs, s)
+			for _, imp := range imps {
+				importSeen[imp] = true
+			}
 		}
 
 		// Response DTO
 		respObj := ctx.Spec.ObjectByName(method.FunctionName + "Response")
 		if respObj != nil && !seen[respObj.Name] {
 			seen[respObj.Name] = true
-			structs = append(structs, objectToDTOStruct(respObj))
+			s, imps := objectToDTOStruct(respObj, ctx.Lang)
+			structs = append(structs, s)
+			for _, imp := range imps {
+				importSeen[imp] = true
+			}
 		}
 	}
 
@@ -74,17 +83,14 @@ func (g *dtoGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File,
 		return nil, nil
 	}
 
-	// Collect imports from all DTO field types
-	var allTypes []string
-	for _, s := range structs {
-		for _, f := range s.Fields {
-			allTypes = append(allTypes, f.Type)
-		}
+	var imports []string
+	for imp := range importSeen {
+		imports = append(imports, imp)
 	}
 
 	data := DTOData{
 		Package: pkg,
-		Imports: shared.CollectImports(allTypes),
+		Imports: imports,
 		Structs: structs,
 	}
 
@@ -106,16 +112,19 @@ func stripDBTag(tag string) string {
 	return dbTagRe.ReplaceAllString(tag, "")
 }
 
-func objectToDTOStruct(obj *spec.ResolvedObject) DTOStruct {
+func objectToDTOStruct(obj *spec.ResolvedObject, lp lang.LangPack) (DTOStruct, []string) {
 	s := DTOStruct{Name: obj.Name}
+	var imports []string
 	for _, f := range obj.Fields {
+		ref := lp.TypeRef(f.Type)
+		imports = append(imports, ref.Imports...)
 		s.Fields = append(s.Fields, DTOField{
 			Name: f.Name,
-			Type: f.Type.GoType,
-			Tag:  stripDBTag(f.GoStructTag),
+			Type: ref.Name,
+			Tag:  stripDBTag(lp.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules)),
 		})
 	}
-	return s
+	return s, imports
 }
 
 func derivePackageName(implName string) string {

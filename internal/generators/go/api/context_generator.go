@@ -59,18 +59,19 @@ func (g *contextGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.F
 	}
 
 	// Build lookup for external calls: "externalName:methodName" -> response body name
+	// Now derived from the IR (ExternalMethod.Returns), not from RawExternals.
 	extResponseLookup := map[string]string{}
 	// extInputTypeLookup maps "externalName:methodName" -> "{CallName}Input"
-	// Every call gets an Input type (path params + query params + body).
 	extInputTypeLookup := map[string]string{}
-	for _, ext := range ctx.Spec.RawExternals {
-		for _, call := range ext.Calls {
-			key := strings.ToLower(ext.Name) + ":" + strings.ToLower(call.Name)
-			if call.Response != nil {
-				// External generator names responses as "{CallName}Response" not the spec name
-				extResponseLookup[key] = toPascalCase(call.Name) + "Response"
+	for _, extImpl := range ctx.Spec.ImplsOfKind(spec.ExternalImpl) {
+		extName := strings.TrimSuffix(extImpl.Name, "Impl")
+		for _, method := range extImpl.Methods {
+			key := strings.ToLower(extName) + ":" + strings.ToLower(method.FunctionName)
+			extInputTypeLookup[key] = toPascalCase(method.FunctionName) + "Input"
+			// If the method has touches with a ResponseBodyRef, it has a response.
+			if len(method.Touches) > 0 && method.Touches[0].ResponseBodyRef != nil {
+				extResponseLookup[key] = toPascalCase(method.FunctionName) + "Response"
 			}
-			extInputTypeLookup[key] = toPascalCase(call.Name) + "Input"
 		}
 	}
 
@@ -200,13 +201,13 @@ func deriveContextOutputType(
 		case "delete":
 			return "", "" // no output for delete
 		case "list":
-			// Detect pagination style from the query function's second return type:
-			// offset → ([]*Model, int) → second return is "int"
-			// cursor → ([]*Model, string) → second return is "string"
+			// Detect pagination style from the query function's second return type Kind:
+			// cursor → second return Kind == TypeStr (string cursor token)
+			// offset → second return Kind == TypeInt (total count)
 			addImport(module + "/generated/tables/" + tableName)
 			paginationPkg := module + "/generated/lib/pagination"
 			if touch.QueryRef != nil && len(touch.QueryRef.Returns) >= 2 {
-				if touch.QueryRef.Returns[1].Type.GoType == "string" {
+				if touch.QueryRef.Returns[1].Type.Kind == spec.TypeStr {
 					addImport(paginationPkg)
 					return "*pagination.CursorPage[" + tableName + "." + modelName + "]", ""
 				}

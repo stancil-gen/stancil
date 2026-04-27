@@ -5,7 +5,6 @@ import (
 
 	"stencil/internal/emitter"
 	"stencil/internal/generator"
-	"stencil/internal/generators/go/shared"
 	"stencil/internal/spec"
 	"stencil/internal/template"
 )
@@ -54,20 +53,27 @@ func (g *typesGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fil
 	}
 
 	data := TypesData{Package: "types"}
-	var allTypes []string
+	importSeen := map[string]bool{}
+
 	for _, obj := range typeObjs {
 		s := TypeStruct{Name: obj.Name}
 		for _, f := range obj.Fields {
+			ref := ctx.Lang.TypeRef(f.Type)
 			s.Fields = append(s.Fields, TypeField{
 				Name: f.Name,
-				Type: f.Type.GoType,
-				Tag:  stripDBTag(f.GoStructTag),
+				Type: ref.Name,
+				Tag:  stripDBTag(ctx.Lang.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules)),
 			})
-			allTypes = append(allTypes, f.Type.GoType)
+			for _, imp := range ref.Imports {
+				importSeen[imp] = true
+			}
 		}
 		data.Structs = append(data.Structs, s)
 	}
-	data.Imports = shared.CollectImports(allTypes)
+
+	for imp := range importSeen {
+		data.Imports = append(data.Imports, imp)
+	}
 
 	content, err := g.engine.Render("go/types/types.go.tmpl", data)
 	if err != nil {

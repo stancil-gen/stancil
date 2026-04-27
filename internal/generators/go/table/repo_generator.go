@@ -9,7 +9,6 @@ import (
 	"stencil/internal/spec"
 	"stencil/internal/template"
 )
-
 // ─── Template data structures ────────────────────────────────────────────────
 
 // RepoFilterClause is one WHERE clause element for find_by / exists / count.
@@ -82,7 +81,7 @@ func (g *repoGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File
 		return nil, fmt.Errorf("repo generator: implementation %s not found in spec", implName)
 	}
 
-	data := buildRepoData(obj, iface, impl, ctx.Spec.Module)
+	data := buildRepoData(obj, iface, impl, ctx.Spec.Module, ctx.Lang)
 
 	content, err := g.engine.Render("go/table/repo.go.tmpl", data)
 	if err != nil {
@@ -98,7 +97,7 @@ func (g *repoGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File
 }
 
 // buildRepoData constructs the template data from resolved spec objects.
-func buildRepoData(obj *spec.ResolvedObject, iface *spec.ResolvedInterface, impl *spec.ResolvedImplementation, module string) RepoData {
+func buildRepoData(obj *spec.ResolvedObject, iface *spec.ResolvedInterface, impl *spec.ResolvedImplementation, module string, lp langPack) RepoData {
 	data := RepoData{
 		Package:       obj.TableName,
 		ModelName:     obj.Name,
@@ -128,8 +127,8 @@ func buildRepoData(obj *spec.ResolvedObject, iface *spec.ResolvedInterface, impl
 		fd := RepoFuncData{
 			FuncName:  fn.Name,
 			ModelName: obj.Name,
-			Params:    renderParams(fn.Params),
-			Returns:   renderReturns(fn.Returns),
+			Params:    renderParams(fn.Params, lp),
+			Returns:   renderReturns(fn.Returns, lp),
 		}
 
 		// Determine QueryKind from the interface function or implementation touch.
@@ -184,24 +183,24 @@ func buildRepoData(obj *spec.ResolvedObject, iface *spec.ResolvedInterface, impl
 
 // renderParams converts a slice of ResolvedParam into a Go function parameter string.
 // Always prepends "ctx context.Context".
-func renderParams(params []spec.ResolvedParam) string {
+func renderParams(params []spec.ResolvedParam, lp langPack) string {
 	parts := []string{"ctx context.Context"}
 	for _, p := range params {
-		parts = append(parts, fmt.Sprintf("%s %s", p.Name, p.Type.GoType))
+		parts = append(parts, fmt.Sprintf("%s %s", p.Name, lp.TypeRef(p.Type).Name))
 	}
 	return strings.Join(parts, ", ")
 }
 
 // renderReturns converts a slice of ResolvedReturn into a Go return type string.
 // Always appends "error".
-func renderReturns(returns []spec.ResolvedReturn) string {
+func renderReturns(returns []spec.ResolvedReturn, lp langPack) string {
 	if len(returns) == 0 {
 		return "error"
 	}
 
 	var parts []string
 	for _, r := range returns {
-		parts = append(parts, r.Type.GoType)
+		parts = append(parts, lp.TypeRef(r.Type).Name)
 	}
 	parts = append(parts, "error")
 

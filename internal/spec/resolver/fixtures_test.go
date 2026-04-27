@@ -93,8 +93,8 @@ func TestQueryVariants_ExistsQueryKind(t *testing.T) {
 			if len(fn.Returns) != 1 {
 				t.Fatalf("ProductExistsBySku: want 1 return, got %d", len(fn.Returns))
 			}
-			if fn.Returns[0].Type.GoType != "bool" {
-				t.Errorf("first return GoType = %q, want bool", fn.Returns[0].Type.GoType)
+			if fn.Returns[0].Type.Kind != spec.TypeBool {
+				t.Errorf("first return Kind = %v, want TypeBool", fn.Returns[0].Type.Kind)
 			}
 			return
 		}
@@ -117,8 +117,8 @@ func TestQueryVariants_CountQueryKind(t *testing.T) {
 			if len(fn.Returns) != 1 {
 				t.Fatalf("CountProductsByStatus: want 1 return, got %d", len(fn.Returns))
 			}
-			if fn.Returns[0].Type.GoType != "int64" {
-				t.Errorf("first return GoType = %q, want int64", fn.Returns[0].Type.GoType)
+			if fn.Returns[0].Type.Kind != spec.TypeInt {
+				t.Errorf("first return Kind = %v, want TypeInt", fn.Returns[0].Type.Kind)
 			}
 			return
 		}
@@ -252,8 +252,8 @@ func TestQueryVariants_ProductsCursorPagination(t *testing.T) {
 			if len(fn.Returns) != 2 {
 				t.Errorf("cursor paginate: want 2 returns, got %d", len(fn.Returns))
 			}
-			if fn.Returns[1].Type.GoType != "string" {
-				t.Errorf("second return should be string (next cursor), got %q", fn.Returns[1].Type.GoType)
+			if fn.Returns[1].Type.Kind != spec.TypeStr {
+				t.Errorf("second return should be string (next cursor), got Kind=%v", fn.Returns[1].Type.Kind)
 			}
 			return
 		}
@@ -643,11 +643,11 @@ func TestFieldRules_AddressFields(t *testing.T) {
 		t.Errorf("Address: want 5 fields, got %d", len(addr.Fields))
 	}
 
-	// Zip should have min_length and max_length in struct tag
+	// Zip should have validation rules (min_length, max_length)
 	for _, f := range addr.Fields {
 		if f.Name == "Zip" {
-			if f.GoStructTag == "" {
-				t.Error("Zip GoStructTag is empty — should contain validation rules")
+			if len(f.Rules) == 0 {
+				t.Error("Zip Rules is empty — should contain min_length and max_length rules")
 			}
 			return
 		}

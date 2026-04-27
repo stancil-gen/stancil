@@ -29,7 +29,10 @@
       "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/externals /Users/harshits/Desktop/projects/order-service/generated/)",
       "Bash(chmod -R u+w /Users/harshits/Desktop/projects/order-service/generated/)",
       "Bash(cp -r /Users/harshits/Desktop/projects/stancil/generated/externals/. /Users/harshits/Desktop/projects/order-service/generated/externals/)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(rm -rf /Users/harshits/Desktop/projects/order-service/generated)",
+      "Bash(mv generated:*)",
+      "Bash(find:*)"
     ]
   }
 }

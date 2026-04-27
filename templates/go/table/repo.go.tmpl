@@ -76,7 +76,7 @@ func (r *{{ $.ImplName }}) {{ .FuncName }}({{ .Params }}) {{ .Returns }} {
 	err := r.db.WithContext(ctx).Model(&{{ .ModelName }}{}).
 		Where("{{ range $i, $c := .FilterClauses }}{{ if $i }} AND {{ end }}{{ $c.Column }} = ?{{ end }}"{{ range .FilterClauses }}, {{ .Param }}{{ end }}).
 		Count(&count).Error
-	return count, err
+	return int(count), err
 {{- else if eq .QueryKind "soft_delete" }}
 	return r.db.WithContext(ctx).Model(&{{ .ModelName }}{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 {{- else if eq .QueryKind "bulk_create" }}

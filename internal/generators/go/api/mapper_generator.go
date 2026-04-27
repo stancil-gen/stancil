@@ -62,22 +62,13 @@ func (g *mapperGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fi
 	}
 
 	// Build external input type lookup: "externalName:methodName" -> "{CallName}Input"
+	// Derived from the IR (ExternalImpl methods), not from RawExternals.
 	extInputTypeLookup := map[string]string{}
-	for _, ext := range ctx.Spec.RawExternals {
-		for _, call := range ext.Calls {
-			key := strings.ToLower(ext.Name) + ":" + strings.ToLower(call.Name)
-			extInputTypeLookup[key] = toPascalCase(call.Name) + "Input"
-		}
-	}
-
-	// Build external response type lookup for external touches
-	extResponseLookup := map[string]string{}
-	for _, ext := range ctx.Spec.RawExternals {
-		for _, call := range ext.Calls {
-			key := strings.ToLower(ext.Name) + ":" + strings.ToLower(call.Name)
-			if call.Response != nil {
-				extResponseLookup[key] = toPascalCase(call.Response.Name)
-			}
+	for _, extImpl := range ctx.Spec.ImplsOfKind(spec.ExternalImpl) {
+		extName := strings.TrimSuffix(extImpl.Name, "Impl")
+		for _, method := range extImpl.Methods {
+			key := strings.ToLower(extName) + ":" + strings.ToLower(method.FunctionName)
+			extInputTypeLookup[key] = toPascalCase(method.FunctionName) + "Input"
 		}
 	}
 

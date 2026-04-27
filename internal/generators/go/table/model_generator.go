@@ -6,10 +6,13 @@ import (
 
 	"stencil/internal/emitter"
 	"stencil/internal/generator"
-	"stencil/internal/generators/go/shared"
+	"stencil/internal/lang"
 	"stencil/internal/spec"
 	"stencil/internal/template"
 )
+
+// langPack is a local alias so helper functions don't need to import the full package path repeatedly.
+type langPack = lang.LangPack
 
 // ─── Template data structures ────────────────────────────────────────────────
 
@@ -54,7 +57,7 @@ func (g *modelGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fil
 		return nil, fmt.Errorf("model generator: object %s is not a TableModel", obj.Name)
 	}
 
-	data := buildModelData(obj, ctx.Spec.Module)
+	data := buildModelData(obj, ctx.Spec.Module, ctx.Lang)
 
 	content, err := g.engine.Render("go/table/model.go.tmpl", data)
 	if err != nil {
@@ -66,7 +69,7 @@ func (g *modelGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fil
 	}, nil
 }
 
-func buildModelData(obj *spec.ResolvedObject, module string) ModelData {
+func buildModelData(obj *spec.ResolvedObject, module string, lang langPack) ModelData {
 	data := ModelData{
 		Package:   obj.TableName,
 		ModelName: obj.Name,
@@ -74,19 +77,20 @@ func buildModelData(obj *spec.ResolvedObject, module string) ModelData {
 	}
 
 	hasCustomTypes := false
-	var allTypes []string
+	importSeen := map[string]bool{}
 
 	for _, f := range obj.Fields {
-		goType := f.Type.GoType
+		ref := lang.TypeRef(f.Type)
+		goType := ref.Name
 
 		// Qualify custom types: "Money" → "types.Money", "*Address" → "*types.Address"
-		if f.Type.IsCustom && goType != "" && !strings.Contains(goType, ".") {
+		if f.Type.IsCustom && !strings.Contains(goType, ".") {
 			bare := strings.TrimPrefix(goType, "*")
-			if strings.HasPrefix(goType, "*") {
-				goType = "*types." + bare
-			} else if strings.HasPrefix(goType, "[]*") {
+			if strings.HasPrefix(goType, "[]*") {
 				bare = strings.TrimPrefix(goType, "[]*")
 				goType = "[]*types." + bare
+			} else if strings.HasPrefix(goType, "*") {
+				goType = "*types." + bare
 			} else {
 				goType = "types." + bare
 			}
@@ -96,9 +100,12 @@ func buildModelData(obj *spec.ResolvedObject, module string) ModelData {
 		data.Fields = append(data.Fields, ModelField{
 			Name: f.Name,
 			Type: goType,
-			Tag:  f.GoStructTag,
+			Tag:  lang.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules),
 		})
-		allTypes = append(allTypes, goType)
+
+		for _, imp := range ref.Imports {
+			importSeen[imp] = true
+		}
 
 		if f.Type.IsEnum && len(f.Values) > 0 {
 			data.EnumBlocks = append(data.EnumBlocks, EnumBlock{
@@ -108,7 +115,9 @@ func buildModelData(obj *spec.ResolvedObject, module string) ModelData {
 		}
 	}
 
-	data.Imports = shared.CollectImports(allTypes)
+	for imp := range importSeen {
+		data.Imports = append(data.Imports, imp)
+	}
 	if hasCustomTypes {
 		data.Imports = append(data.Imports, module+"/generated/types")
 	}

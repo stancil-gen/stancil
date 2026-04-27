@@ -125,11 +125,14 @@ func TestLevel1_TableModel_CustomTypeRaw(t *testing.T) {
 	}
 	for _, f := range order.Fields {
 		if f.Name == "Total" {
-			if f.Type.GoPointer {
-				t.Errorf("Total (custom type Money) should be raw — GoPointer=false, got true")
+			if !f.Type.IsCustom {
+				t.Errorf("Total should be a custom type (IsCustom=true)")
 			}
-			if f.Type.GoType != "Money" {
-				t.Errorf("Total GoType = %q, want \"Money\" (no *)", f.Type.GoType)
+			if f.Type.CustomName != "Money" {
+				t.Errorf("Total CustomName = %q, want \"Money\"", f.Type.CustomName)
+			}
+			if f.Type.Nullable {
+				t.Errorf("Total (custom type Money) should not be nullable")
 			}
 			return
 		}
@@ -234,20 +237,17 @@ func TestLevel1_ImportResolver_Objects(t *testing.T) {
 	if money == nil {
 		t.Fatal("Money not found")
 	}
-	imports := money.Imports[spec.LangGo]
-	if imports.Lang != spec.LangGo {
-		t.Errorf("ImportSet Lang = %q, want %q", imports.Lang, spec.LangGo)
-	}
-	// Money has decimal field → should include shopspring
-	found := false
-	for _, p := range imports.Paths {
-		if p == "github.com/shopspring/decimal" {
-			found = true
+	// Imports are now collected inline by LangPack at generator time, not stored on the IR.
+	// Verify instead that the TypeDescriptor has the right Kind for decimal fields.
+	for _, f := range money.Fields {
+		if f.Name == "Amount" {
+			if f.Type.Kind != spec.TypeDecimal {
+				t.Errorf("Amount Kind = %v, want TypeDecimal", f.Type.Kind)
+			}
+			return
 		}
 	}
-	if !found {
-		t.Errorf("Money ImportSet missing shopspring/decimal; got %v", imports.Paths)
-	}
+	t.Error("Amount field not found on Money")
 }
 
 // ─── Level 2: Interfaces ──────────────────────────────────────────────────────
@@ -434,8 +434,8 @@ func TestLevel2_MapperInterface_InputType(t *testing.T) {
 	if len(chargeInputFn.Returns) == 0 {
 		t.Fatal("MapChargePaymentInput has no returns")
 	}
-	if chargeInputFn.Returns[0].Type.GoType != "ChargeRequest" {
-		t.Errorf("MapChargePaymentInput return GoType = %q, want ChargeRequest", chargeInputFn.Returns[0].Type.GoType)
+	if chargeInputFn.Returns[0].Type.CustomName != "ChargeRequest" {
+		t.Errorf("MapChargePaymentInput return CustomName = %q, want ChargeRequest", chargeInputFn.Returns[0].Type.CustomName)
 	}
 
 	// MapResponse must always be present

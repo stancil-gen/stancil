@@ -145,7 +145,7 @@ func (g *externalGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.
 		return nil, nil
 	}
 
-	data := g.buildData(impl, ctx.Spec)
+	data := g.buildData(impl, ctx)
 
 	content, err := g.engine.Render("go/external/external.go.tmpl", data)
 	if err != nil {
@@ -156,22 +156,12 @@ func (g *externalGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.
 	return []emitter.File{{Path: "externals/" + fileName, Content: content}}, nil
 }
 
-func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec.ResolvedSpec) ExternalData {
+func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, ctx generator.GeneratorContext) ExternalData {
+	s := ctx.Spec
+
 	ifaceName := ""
 	if impl.Implements != nil {
 		ifaceName = impl.Implements.Name
-	}
-
-	// Derive the external name from the impl name (e.g. "StripeClientImpl" → "StripeClient")
-	externalName := strings.TrimSuffix(impl.Name, "Impl")
-
-	// Find the matching ExternalAST for query params, headers, etc.
-	var extAST *spec.ExternalAST
-	for i := range s.RawExternals {
-		if toPascalCase(s.RawExternals[i].Name) == externalName {
-			extAST = &s.RawExternals[i]
-			break
-		}
 	}
 
 	data := ExternalData{
@@ -180,33 +170,6 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 		InterfaceName:  ifaceName,
 		ImplName:       impl.Name,
 		TimeoutSeconds: 30, // default
-	}
-
-	// Resolve BaseURLField and AuthTokenField from the AST
-	if extAST != nil {
-		data.BaseURLField = resolveConfigRef(extAST.BaseURL)
-		if extAST.AuthToken != "" {
-			data.AuthTokenField = resolveConfigRef(extAST.AuthToken)
-		}
-		// Parse timeout string: "10s" → 10, "5s" → 5
-		if extAST.Timeout != "" {
-			secs := parseTimeoutSeconds(extAST.Timeout)
-			if secs > 0 {
-				data.TimeoutSeconds = secs
-			}
-		}
-	}
-
-	// Collect static headers from the ExternalAST (external-level headers with Value set)
-	if extAST != nil {
-		for _, h := range extAST.Headers {
-			if h.Value != "" {
-				data.StaticHeaders = append(data.StaticHeaders, StaticHeader{
-					Name:  h.Name,
-					Value: h.Value,
-				})
-			}
-		}
 	}
 
 	// Track seen types and errors for deduplication
@@ -226,10 +189,34 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 		if data.AuthKind == "" {
 			data.AuthKind = touch.AuthKind
 		}
+		// BaseURLField and AuthTokenField come directly from the touch IR
+		if data.BaseURLField == "" && touch.BaseURLField != "" {
+			data.BaseURLField = touch.BaseURLField
+		}
+		if data.AuthTokenField == "" && touch.AuthConfigField != "" {
+			data.AuthTokenField = touch.AuthConfigField
+		}
 		if mi == 0 {
 			data.RetryAttempts = touch.RetryAttempts
 			data.RetryBackoff = touch.RetryBackoff
 			data.RetryOnStatus = touch.RetryOnStatus
+		}
+
+		// Static headers from touch.StaticHeaders
+		for hdrName, hdrVal := range touch.StaticHeaders {
+			alreadyAdded := false
+			for _, sh := range data.StaticHeaders {
+				if sh.Name == hdrName {
+					alreadyAdded = true
+					break
+				}
+			}
+			if !alreadyAdded {
+				data.StaticHeaders = append(data.StaticHeaders, StaticHeader{
+					Name:  hdrName,
+					Value: hdrVal,
+				})
+			}
 		}
 
 		em := ExternalMethod{
@@ -239,38 +226,32 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 			InputType:  method.FunctionName + "Input",
 		}
 
-		// ── Path params from {placeholders} in the path template ──
-		matches := pathParamRe.FindAllStringSubmatch(touch.PathTemplate, -1)
-		for _, m := range matches {
+		// ── Path params from touch.PathParams (pre-extracted by resolver) ──
+		for _, paramName := range touch.PathParams {
 			em.PathParams = append(em.PathParams, PathParam{
-				Placeholder: m[1],
-				FieldName:   toPascalCase(m[1]),
+				Placeholder: paramName,
+				FieldName:   toPascalCase(paramName),
 			})
 		}
 
-		// ── Query params from the AST ──
-		if extAST != nil {
-			callAST := findCallAST(extAST, method.FunctionName)
-			if callAST != nil {
-				for _, qp := range callAST.QueryParams {
-					goType := mapSimpleType(qp.Type)
-					em.QueryParams = append(em.QueryParams, QueryParam{
-						ParamName: qp.Name,
-						FieldName: toPascalCase(qp.Name),
-						GoType:    goType,
-						IsString:  goType == "string",
-					})
-				}
-				// Dynamic headers (call-level headers where Type != "")
-				for _, h := range callAST.Headers {
-					if h.Type != "" {
-						em.DynamicHeaders = append(em.DynamicHeaders, DynamicHeader{
-							HeaderName: h.Name,
-							FieldName:  toPascalCase(strings.ReplaceAll(h.Name, "-", "_")),
-						})
-					}
-				}
-			}
+		// ── Query params from touch.QueryParamFields ──
+		for _, f := range touch.QueryParamFields {
+			ref := ctx.Lang.TypeRef(f.Type)
+			goType := ref.Name
+			em.QueryParams = append(em.QueryParams, QueryParam{
+				ParamName: f.DBColumn,
+				FieldName: f.Name,
+				GoType:    goType,
+				IsString:  goType == "string",
+			})
+		}
+
+		// ── Dynamic headers from touch.DynamicHeaders ──
+		for _, f := range touch.DynamicHeaders {
+			em.DynamicHeaders = append(em.DynamicHeaders, DynamicHeader{
+				HeaderName: f.DBColumn,
+				FieldName:  f.Name,
+			})
 		}
 
 		// ── Body type (only for POST/PUT/PATCH) ──
@@ -280,7 +261,7 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 			em.BodyType = bodyTypeName
 			if !seenIO[bodyTypeName] {
 				seenIO[bodyTypeName] = true
-				data.BodyTypes = append(data.BodyTypes, buildIOStruct(bodyTypeName, touch.RequestBodyRef, "json"))
+				data.BodyTypes = append(data.BodyTypes, buildIOStruct(bodyTypeName, touch.RequestBodyRef, "json", ctx))
 			}
 		}
 
@@ -291,7 +272,7 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 			em.ResponseType = respTypeName
 			if !seenIO[respTypeName] {
 				seenIO[respTypeName] = true
-				data.OutputTypes = append(data.OutputTypes, buildIOStruct(respTypeName, touch.ResponseBodyRef, "json"))
+				data.OutputTypes = append(data.OutputTypes, buildIOStruct(respTypeName, touch.ResponseBodyRef, "json", ctx))
 			}
 		}
 
@@ -348,46 +329,6 @@ func (g *externalGenerator) buildData(impl *spec.ResolvedImplementation, s *spec
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// resolveConfigRef converts a "${STRIPE_URL}" reference to a PascalCase config field name "StripeUrl".
-func resolveConfigRef(ref string) string {
-	inner := strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(ref), "}"), "${")
-	return configToPascalCase(inner)
-}
-
-// configToPascalCase converts UPPER_SNAKE_CASE to PascalCase with simple word casing (not acronym-aware).
-// e.g. "STRIPE_SECRET_KEY" → "StripeSecretKey", "DATABASE_URL" → "DatabaseUrl"
-func configToPascalCase(s string) string {
-	parts := strings.FieldsFunc(s, func(r rune) bool {
-		return r == '_' || r == '-'
-	})
-	var result strings.Builder
-	for _, part := range parts {
-		if len(part) == 0 {
-			continue
-		}
-		runes := []rune(strings.ToLower(part))
-		runes[0] = unicode.ToUpper(runes[0])
-		result.WriteString(string(runes))
-	}
-	return result.String()
-}
-
-// parseTimeoutSeconds parses a timeout string like "10s" or "5s" into seconds.
-func parseTimeoutSeconds(s string) int {
-	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "s") {
-		s = strings.TrimSuffix(s, "s")
-		var n int
-		for _, r := range s {
-			if r >= '0' && r <= '9' {
-				n = n*10 + int(r-'0')
-			}
-		}
-		return n
-	}
-	return 0
-}
-
 // buildInputFields creates the fields for a {CallName}Input struct.
 func buildInputFields(em ExternalMethod) []IOField {
 	var fields []IOField
@@ -431,28 +372,25 @@ func buildInputFields(em ExternalMethod) []IOField {
 	return fields
 }
 
-// findCallAST finds the ExternalCallAST matching a function name.
-func findCallAST(ext *spec.ExternalAST, funcName string) *spec.ExternalCallAST {
-	for i := range ext.Calls {
-		if toPascalCase(ext.Calls[i].Name) == funcName {
-			return &ext.Calls[i]
+// buildIOStruct creates an IOStruct from a ResolvedObject, using the given
+// struct name (which may differ from the object's original name).
+func buildIOStruct(name string, obj *spec.ResolvedObject, tagPrefix string, ctx generator.GeneratorContext) IOStruct {
+	s := IOStruct{Name: name}
+	for _, f := range obj.Fields {
+		ref := ctx.Lang.TypeRef(f.Type)
+		// For external types use JSON-only tags (no DB tag)
+		tag := fmt.Sprintf("`json:\"%s\"`", f.DBColumn)
+		if tagPrefix != "json" {
+			// Use the full FieldTag and strip DB portion
+			tag = stripDBTag(ctx.Lang.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules))
 		}
+		s.Fields = append(s.Fields, IOField{
+			Name: f.Name,
+			Type: ref.Name,
+			Tag:  tag,
+		})
 	}
-	return nil
-}
-
-// mapSimpleType converts a YAML type name to a Go type for query params.
-func mapSimpleType(yamlType string) string {
-	switch yamlType {
-	case "int":
-		return "int"
-	case "bool":
-		return "bool"
-	case "decimal":
-		return "float64"
-	default:
-		return "string"
-	}
+	return s
 }
 
 var dbTagRe = regexp.MustCompile(` ?db:"[^"]*"`)
@@ -461,22 +399,20 @@ func stripDBTag(tag string) string {
 	return dbTagRe.ReplaceAllString(tag, "")
 }
 
-// buildIOStruct creates an IOStruct from a ResolvedObject, using the given
-// struct name (which may differ from the object's original name).
-func buildIOStruct(name string, obj *spec.ResolvedObject, tagPrefix string) IOStruct {
-	s := IOStruct{Name: name}
-	for _, f := range obj.Fields {
-		tag := stripDBTag(f.GoStructTag)
-		if tagPrefix == "json" && tag == "" {
-			tag = fmt.Sprintf("`json:\"%s\"`", toSnakeCase(f.Name))
+// parseTimeoutSeconds parses a timeout string like "10s" or "5s" into seconds.
+func parseTimeoutSeconds(s string) int {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "s") {
+		s = strings.TrimSuffix(s, "s")
+		var n int
+		for _, r := range s {
+			if r >= '0' && r <= '9' {
+				n = n*10 + int(r-'0')
+			}
 		}
-		s.Fields = append(s.Fields, IOField{
-			Name: f.Name,
-			Type: f.Type.GoType,
-			Tag:  tag,
-		})
+		return n
 	}
-	return s
+	return 0
 }
 
 // ─── Case conversion helpers ────────────────────────────────────────────────

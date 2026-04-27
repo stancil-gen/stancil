@@ -10,6 +10,8 @@ import (
 	"golang.org/x/tools/imports"
 )
 
+const lockFileName = ".stencil.lock"
+
 type File struct {
 	Path     string
 	Content  []byte
@@ -42,7 +44,9 @@ func (e *Emitter) StageScaffold(f File) {
 	e.Scaffold = append(e.Scaffold, f)
 }
 
-// Flush safely sweeps buffered boundaries identically utilizing protective permissions 
+// Flush safely sweeps buffered boundaries utilizing protective permissions.
+// It backs up the existing output, wipes it clean, writes all staged files,
+// then locks everything read-only. Stale files from previous runs are removed.
 func (e *Emitter) Flush() error {
 	if len(e.Staged) == 0 {
 		return nil
@@ -53,22 +57,26 @@ func (e *Emitter) Flush() error {
 		return err
 	}
 
+	// Wipe the output directory so stale files from previous runs are removed.
+	if err := os.RemoveAll(e.OutputDir); err != nil {
+		return err
+	}
+
 	for _, f := range e.Staged {
 		if err := e.writeFile(f); err != nil {
-			e.rollback() // Trap any mathematical disk anomalies and revert prior
+			e.rollback()
 			return err
 		}
 	}
 
 	e.lockOutputDir()
 
-	// Write scaffold files (only if they don't already exist)
+	// Write scaffold files (only if they don't already exist).
 	for _, f := range e.Scaffold {
 		fullPath := filepath.Join(e.ScaffoldDir, f.Path)
 		if _, err := os.Stat(fullPath); err == nil {
 			continue // file exists — don't overwrite
 		}
-		// scaffold write failures are non-fatal
 		_ = e.writeScaffoldFile(f)
 	}
 
@@ -187,17 +195,16 @@ func (e *Emitter) lockOutputDir() {
 	})
 }
 
-// writeLockFile builds the absolute root path validation array manifest protecting cross-run executions natively
+// writeLockFile writes .stencil.lock into ScaffoldDir (next to stencil.yaml).
 func (e *Emitter) writeLockFile() error {
 	files := make([]string, len(e.Staged))
 	for i, f := range e.Staged {
 		files[i] = f.Path
 	}
-	
 	lock := map[string]interface{}{
 		"spec_hash": e.lockHash,
 		"files":     files,
 	}
 	data, _ := json.MarshalIndent(lock, "", "  ")
-	return os.WriteFile(".stencil.lock", data, 0644)
+	return os.WriteFile(filepath.Join(e.ScaffoldDir, lockFileName), data, 0644)
 }

@@ -108,11 +108,12 @@ func (g *serviceGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.F
 	extInputLookup := map[string]string{}
 	// External call response existence lookup
 	extResponseLookup := map[string]bool{}
-	for _, ext := range ctx.Spec.RawExternals {
-		for _, call := range ext.Calls {
-			key := strings.ToLower(ext.Name) + ":" + strings.ToLower(call.Name)
-			extInputLookup[key] = toPascalCase(call.Name) + "Input"
-			if call.Response != nil {
+	for _, extImpl := range ctx.Spec.ImplsOfKind(spec.ExternalImpl) {
+		extName := strings.TrimSuffix(extImpl.Name, "Impl")
+		for _, method := range extImpl.Methods {
+			key := strings.ToLower(extName) + ":" + strings.ToLower(method.FunctionName)
+			extInputLookup[key] = toPascalCase(method.FunctionName) + "Input"
+			if len(method.Touches) > 0 && method.Touches[0].ResponseBodyRef != nil {
 				extResponseLookup[key] = true
 			}
 		}
@@ -206,14 +207,6 @@ func (g *serviceGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.F
 		methods = append(methods, sm)
 	}
 
-	// Add mapper dependencies for each method
-	for _, m := range methods {
-		deps = append(deps, ServiceDep{
-			FieldName: m.MappersField,
-			TypeName:  m.MappersType,
-		})
-	}
-
 	// Add external imports if any step uses externals
 	for _, m := range methods {
 		for _, step := range m.Steps {
@@ -302,9 +295,9 @@ func buildServiceStep(touch spec.ResolvedTouch, methodName string, extInputLooku
 			step.RepoMethod = touch.QueryRef.Name
 		}
 
-		// Pagination kind for list ops: detect from QueryRef return types
+		// Pagination kind for list ops: detect from QueryRef return types using Kind
 		if touch.Op == "list" && touch.QueryRef != nil && len(touch.QueryRef.Returns) >= 2 {
-			if touch.QueryRef.Returns[1].Type.GoType == "string" {
+			if touch.QueryRef.Returns[1].Type.Kind == spec.TypeStr {
 				step.PaginationKind = "cursor"
 			} else {
 				step.PaginationKind = "offset"

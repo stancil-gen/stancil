@@ -43,7 +43,7 @@ func (g *configGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fi
 	for _, cv := range ctx.Spec.Config {
 		vars = append(vars, ConfigVar{
 			GoName:  configToPascalCase(cv.Name),
-			GoType:  "string",
+			GoType:  ctx.Lang.ConfigVarType(cv.YAMLType),
 			EnvName: configToEnvName(cv.Name),
 		})
 	}
