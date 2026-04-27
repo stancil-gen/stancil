@@ -1,10 +1,8 @@
 package generator
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/fs"
 
 	"golang.org/x/sync/errgroup"
 	"stencil/internal/emitter"
@@ -12,7 +10,6 @@ import (
 	golang "stencil/internal/lang/go"
 	"stencil/internal/plan"
 	"stencil/internal/spec"
-	lib "github.com/stencil-run/stencil-go"
 )
 
 // Orchestrator translates Kahn's output Tiers into physical Template executions.
@@ -27,32 +24,6 @@ func NewOrchestrator(r *Registry, e *emitter.Emitter) *Orchestrator {
 
 // Run executes topographical tier batches sequentially, with nodes within each tier running concurrently.
 func (o *Orchestrator) Run(specContext *spec.ResolvedSpec, dagPlan *plan.Plan) error {
-	// Preload native runtime library — rewrite inter-package imports to the project's module path.
-	libModulePath := "github.com/stencil-run/stencil-go"
-	targetLibPath := specContext.Module + "/generated/lib"
-
-	err := fs.WalkDir(lib.FS, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if path == "embed.go" || path == "." || path == "go.mod" || path == "go.sum" {
-			return nil
-		}
-		content, err := fs.ReadFile(lib.FS, path)
-		if err != nil {
-			return err
-		}
-		content = bytes.ReplaceAll(content, []byte(libModulePath), []byte(targetLibPath))
-		o.emitter.Stage(emitter.File{Path: "lib/" + path, Content: content})
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed packaging runtime library: %v", err)
-	}
-
 	// Instantiate the language pack based on the spec's target language.
 	// All generators within this run share the same LangPack instance.
 	lp, err := newLangPack(specContext.Lang)

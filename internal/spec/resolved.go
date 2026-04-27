@@ -405,6 +405,9 @@ type ResolvedImplementation struct {
 
 	Dependencies []ResolvedDependency
 
+	// RepositoryImpl only: which database this repo connects to
+	Database *ResolvedDatabase
+
 	// ServiceImpl only
 	BasePath string
 
@@ -449,6 +452,18 @@ type ResolvedConfigVar struct {
 	Default  interface{}
 }
 
+// ─── ResolvedDatabase ─────────────────────────────────────────────────────────
+
+// ResolvedDatabase is one resolved entry from the spec's `db:` block.
+type ResolvedDatabase struct {
+	Name      string   // identifier: "postgres", "primary", "analytics"
+	Driver    DBDriver // DBPostgres | DBMySQL | DBMongo
+	Framework string   // "gorm" | "sqlx" | "sqlc"
+	URLField  string   // PascalCase config field name, e.g. "DatabaseUrl"
+	TypeName  string   // Go named wrapper type: e.g. "PostgresDB" = Pascal(Name)+"DB"
+	FuncName  string   // MustOpen function suffix: e.g. "Postgres" → MustOpenPostgres
+}
+
 // ─── ResolvedSpec — the final output ─────────────────────────────────────────
 
 // ResolvedSpec is what every Generator receives. Generators query the three
@@ -459,7 +474,7 @@ type ResolvedSpec struct {
 	Module       string
 	Lang         Lang
 	Framework    Framework
-	DB           DBDriver
+	Databases    []ResolvedDatabase // declared DB connections (from db: block)
 	ConfigLoader string // "env" | "viper-yaml" | "viper-json"
 
 	// Level 1 output

@@ -476,9 +476,15 @@ func buildServiceImpl(
 				extIfaceName := toPascalCase(t.External)
 				extIface := findInterfaceByName(interfaces, extIfaceName)
 
+				// Accept both `method:` and `op:` in the YAML for external touches.
+				extMethodRaw := t.Method
+				if extMethodRaw == "" {
+					extMethodRaw = t.Op
+				}
+
 				var extMethod *spec.ResolvedFunction
-				if extIface != nil {
-					methodName := toPascalCase(t.Method)
+				if extIface != nil && extMethodRaw != "" {
+					methodName := toPascalCase(extMethodRaw)
 					for i := range extIface.Functions {
 						if extIface.Functions[i].Name == methodName {
 							extMethod = &extIface.Functions[i]
@@ -487,14 +493,16 @@ func buildServiceImpl(
 					}
 				}
 
+				// Register as interface type (no pointer) — the service holds the interface,
+				// not the concrete implementation, enabling developer override via DI.
 				extFieldName := strings.ToLower(string(extIfaceName[0])) + extIfaceName[1:]
-				addDep("ext:"+t.External, extFieldName, "*"+extIfaceName+"Impl", "")
+				addDep("ext:"+t.External, extFieldName, extIfaceName, "")
 
 				touch = spec.ResolvedTouch{
 					Kind:           spec.TouchKindExternal,
 					ExternalRef:    extIface,
 					ExternalMethod: extMethod,
-					Op:             t.Method,
+					Op:             extMethodRaw,
 					ResultField:    outputField,
 					FatalError:     fatal,
 					StepID:         step.ID,

@@ -28,6 +28,7 @@ func (r *Resolver) Resolve() *spec.ResolvedSpec {
 
 	r.resolveMetadata()
 	r.resolveConfig()
+	r.resolveDatabases()
 
 	// Feature registration order matters — Types before Tables before APIs.
 	// Each feature appends to r.res.Objects/Interfaces/Implementations.
@@ -67,14 +68,6 @@ func (r *Resolver) resolveMetadata() {
 	case "java":
 		r.res.Lang = spec.LangJava
 	}
-	switch r.ast.DB {
-	case "postgres":
-		r.res.DB = spec.DBPostgres
-	case "mysql":
-		r.res.DB = spec.DBMySQL
-	case "mongo":
-		r.res.DB = spec.DBMongo
-	}
 	switch r.ast.Framework {
 	case "gin":
 		r.res.Framework = spec.FrameworkGin
@@ -86,6 +79,42 @@ func (r *Resolver) resolveMetadata() {
 	r.res.ConfigLoader = r.ast.ConfigLoader
 	if r.res.ConfigLoader == "" {
 		r.res.ConfigLoader = "env"
+	}
+}
+
+func (r *Resolver) resolveDatabases() {
+	for _, db := range r.ast.Databases {
+		driver := db.Driver
+		if driver == "" {
+			driver = db.Name // "postgres", "mysql", "mongo" used as both name and driver
+		}
+		framework := db.Framework
+		if framework == "" {
+			framework = "gorm"
+		}
+
+		var resolvedDriver spec.DBDriver
+		switch driver {
+		case "postgres":
+			resolvedDriver = spec.DBPostgres
+		case "mysql":
+			resolvedDriver = spec.DBMySQL
+		case "mongo":
+			resolvedDriver = spec.DBMongo
+		}
+
+		urlField := resolveConfigRef(db.URL)
+		typeName := toPascalCase(db.Name) + "DB"
+		funcName := toPascalCase(db.Name)
+
+		r.res.Databases = append(r.res.Databases, spec.ResolvedDatabase{
+			Name:      db.Name,
+			Driver:    resolvedDriver,
+			Framework: framework,
+			URLField:  urlField,
+			TypeName:  typeName,
+			FuncName:  funcName,
+		})
 	}
 }
 

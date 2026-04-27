@@ -7,8 +7,8 @@ type SpecAST struct {
 	Project       string             `yaml:"project"`
 	Lang          string             `yaml:"lang"`
 	Framework     string             `yaml:"framework"`
-	DB            string             `yaml:"db"`
-	ConfigLoader  string             `yaml:"config_loader"` // "env" (default) | "viper-yaml" | "viper-json"
+	Databases     []DatabaseAST      `yaml:"db"`       // replaces top-level db: string
+	ConfigLoader  string             `yaml:"config_loader"`
 	Config        []ConfigVarAST     `yaml:"config"`
 	Tables        []TableAST         `yaml:"tables"`
 	Types         []CustomTypeAST    `yaml:"types"`
@@ -39,15 +39,24 @@ type ConfigVarAST struct {
 
 // ── Core Infrastructure ─────────────────────────────────────────
 
+// DatabaseAST declares one database connection in the `db:` block.
+type DatabaseAST struct {
+	Name      string `yaml:"name"`      // identifier used by tables, e.g. "postgres", "primary"
+	Driver    string `yaml:"driver"`    // "postgres" | "mysql" | "mongo" — defaults to Name
+	Framework string `yaml:"framework"` // "gorm" | "sqlx" | "sqlc" — defaults to "gorm"
+	URL       string `yaml:"url"`       // config var ref, e.g. "${DATABASE_URL}"
+}
+
 type TableAST struct {
-	Name        string            `yaml:"name"`
-	Fields      []FieldAST        `yaml:"fields"`
+	Name        string           `yaml:"name"`
+	DB          string           `yaml:"db"` // name of database from db: block
+	Fields      []FieldAST       `yaml:"fields"`
 	Queries     []QueryAST       `yaml:"queries"`
-	SoftDelete  bool              `yaml:"soft_delete"`
-	BulkCreate  bool              `yaml:"bulk_create"`
-	States      *StateMachineAST  `yaml:"states"`
-	DTOs        *TableDTOAST      `yaml:"dtos"`
-	Errors      []TableErrorAST   `yaml:"errors"`
+	SoftDelete  bool             `yaml:"soft_delete"`
+	BulkCreate  bool             `yaml:"bulk_create"`
+	States      *StateMachineAST `yaml:"states"`
+	DTOs        *TableDTOAST     `yaml:"dtos"`
+	Errors      []TableErrorAST  `yaml:"errors"`
 }
 
 type TableErrorAST struct {

@@ -13,12 +13,17 @@ import (
 // ── Template data types ─────────────────────────────────────────────────────
 
 type WireData struct {
-	Package   string
-	Module    string
-	Imports   []WireImport
-	Provides  []WireProvide
-	HasDB     bool          // true if tables exist (needs gorm.DB)
-	Externals []WireExternal // for closure providers
+	Package       string
+	Module        string
+	Imports       []WireImport
+	Provides      []WireProvide
+	DBConnections []WireDBConn  // one per declared database
+	Externals     []WireExternal
+}
+
+type WireDBConn struct {
+	TypeName string // "PostgresDB"
+	FuncName string // "Postgres" → db.MustOpenPostgres
 }
 
 type WireImport struct {
@@ -126,13 +131,22 @@ func (g *wireGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File
 		})
 	}
 
+	// Build DB connection providers from resolved databases
+	var dbConns []WireDBConn
+	for _, db := range s.Databases {
+		dbConns = append(dbConns, WireDBConn{
+			TypeName: db.TypeName,
+			FuncName: db.FuncName,
+		})
+	}
+
 	data := WireData{
-		Package:   "generated",
-		Module:    s.Module,
-		Imports:   imports,
-		Provides:  provides,
-		HasDB:     len(s.ObjectsOfKind(spec.TableModel)) > 0,
-		Externals: externals,
+		Package:       "generated",
+		Module:        s.Module,
+		Imports:       imports,
+		Provides:      provides,
+		DBConnections: dbConns,
+		Externals:     externals,
 	}
 
 	out, err := g.engine.Render("go/infra/wire.go.tmpl", data)

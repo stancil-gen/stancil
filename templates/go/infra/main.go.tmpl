@@ -7,7 +7,7 @@ import (
 
 	"{{ .Module }}/generated"
 	"{{ .Module }}/generated/config"
-	"{{ .Module }}/generated/lib/container"
+	"github.com/stancil-gen/stancil-go/container"
 	"{{ .Module }}/hooks"
 {{ range .Groups }}	{{ .HandlerPkg }} "{{ .ImportPath }}"
 {{ end }})

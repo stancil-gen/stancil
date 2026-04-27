@@ -205,7 +205,7 @@ func deriveContextOutputType(
 			// cursor → second return Kind == TypeStr (string cursor token)
 			// offset → second return Kind == TypeInt (total count)
 			addImport(module + "/generated/tables/" + tableName)
-			paginationPkg := module + "/generated/lib/pagination"
+			paginationPkg := generator.LibImportPath("pagination")
 			if touch.QueryRef != nil && len(touch.QueryRef.Returns) >= 2 {
 				if touch.QueryRef.Returns[1].Type.Kind == spec.TypeStr {
 					addImport(paginationPkg)

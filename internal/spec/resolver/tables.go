@@ -20,6 +20,20 @@ func (f *TablesFeature) Validate(ast *spec.SpecAST) []error { return nil }
 
 func (f *TablesFeature) Resolve(ast *spec.SpecAST, ir *spec.ResolvedSpec) error {
 	for _, t := range ast.Tables {
+		// Resolve which database this table belongs to.
+		// Default to the only DB if unspecified; error handled by validator.
+		var tableDB *spec.ResolvedDatabase
+		if t.DB != "" {
+			for i := range ir.Databases {
+				if ir.Databases[i].Name == t.DB {
+					tableDB = &ir.Databases[i]
+					break
+				}
+			}
+		} else if len(ir.Databases) == 1 {
+			tableDB = &ir.Databases[0]
+		}
+
 		// Level 1: model object
 		modelObj := buildTableModel(t)
 		ir.Objects = append(ir.Objects, modelObj)
@@ -31,7 +45,7 @@ func (f *TablesFeature) Resolve(ast *spec.SpecAST, ir *spec.ResolvedSpec) error 
 		ifacePtr := &ir.Interfaces[len(ir.Interfaces)-1]
 
 		// Level 3: repository implementation
-		repoImpl := buildRepositoryImpl(t, modelPtr, ifacePtr)
+		repoImpl := buildRepositoryImpl(t, modelPtr, ifacePtr, tableDB, ir.Module)
 		ir.Implementations = append(ir.Implementations, repoImpl)
 	}
 	return nil
@@ -293,16 +307,34 @@ func repoFunc(name string, params []spec.ResolvedParam, returns []spec.ResolvedR
 
 // ─── Level 3: buildRepositoryImpl ────────────────────────────────────────────
 
-func buildRepositoryImpl(table spec.TableAST, tableObj *spec.ResolvedObject, repoIface *spec.ResolvedInterface) spec.ResolvedImplementation {
+func buildRepositoryImpl(table spec.TableAST, tableObj *spec.ResolvedObject, repoIface *spec.ResolvedInterface, db *spec.ResolvedDatabase, module string) spec.ResolvedImplementation {
 	name := modelName(table.Name)
+
+	// Build the DB dependency using the named wrapper type when a DB is resolved.
+	// Named types (e.g. *db.PostgresDB) allow multiple DBs in one service without DI collisions.
+	var dbDep spec.ResolvedDependency
+	if db != nil {
+		dbDep = spec.ResolvedDependency{
+			FieldName: "db",
+			TypeName:  "*db." + db.TypeName,
+			Import:    module + "/generated/db",
+		}
+	} else {
+		// Fallback for specs without a db: block (should be caught by validator, but be safe)
+		dbDep = spec.ResolvedDependency{
+			FieldName: "db",
+			TypeName:  "*gorm.DB",
+			Import:    "gorm.io/gorm",
+		}
+	}
+
 	impl := spec.ResolvedImplementation{
-		Name:       name + "RepositoryImpl",
-		Path:       fmt.Sprintf("generated/repo/%s/repo_impl.go", table.Name),
-		Kind:       spec.RepositoryImpl,
-		Implements: repoIface,
-		Dependencies: []spec.ResolvedDependency{
-			{FieldName: "db", TypeName: "*gorm.DB", Import: "gorm.io/gorm"},
-		},
+		Name:         name + "RepositoryImpl",
+		Path:         fmt.Sprintf("generated/repo/%s/repo_impl.go", table.Name),
+		Kind:         spec.RepositoryImpl,
+		Implements:   repoIface,
+		Database:     db,
+		Dependencies: []spec.ResolvedDependency{dbDep},
 	}
 
 	// Standard CRUD methods

@@ -41,6 +41,7 @@ type RepoData struct {
 	InterfaceName string         // "UserRepository"
 	ImplName      string         // "UserRepositoryImpl"
 	Module        string         // Go module path for imports
+	DBTypeName    string         // Named DB wrapper type: "PostgresDB" (empty → fallback *gorm.DB)
 	HasPagination bool           // true if any function uses paginate
 	NotFoundError string         // var name of the NOT_FOUND error, e.g. "ErrCustomerNotFound"
 	Functions     []RepoFuncData // one per method
@@ -104,6 +105,11 @@ func buildRepoData(obj *spec.ResolvedObject, iface *spec.ResolvedInterface, impl
 		InterfaceName: iface.Name,
 		ImplName:      impl.Name,
 		Module:        module,
+	}
+
+	// Set the named DB type if this repo has a resolved database.
+	if impl.Database != nil {
+		data.DBTypeName = impl.Database.TypeName
 	}
 
 	// Find the NOT_FOUND error.

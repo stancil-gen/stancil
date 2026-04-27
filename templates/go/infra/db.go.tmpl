@@ -3,30 +3,30 @@ package db
 
 import (
 	"log"
-{{ if eq .Driver "postgres" }}
+{{ range .Connections }}{{ if eq .Driver "postgres" }}
 	"gorm.io/driver/postgres"
 {{ else if eq .Driver "mysql" }}
 	"gorm.io/driver/mysql"
-{{ end }}
+{{ end }}{{ end }}
 	"gorm.io/gorm"
 
 	"{{ .Module }}/generated/config"
 )
+{{ range .Connections }}
+// {{ .TypeName }} is a named wrapper for the {{ .Driver }} connection.
+// Using a distinct type (not bare *gorm.DB) allows the DI container to
+// resolve multiple database connections in the same service without collisions.
+type {{ .TypeName }} struct{ *gorm.DB }
 
-// MustOpen opens a database connection using the application config.
-// Fatals if the connection cannot be established.
-func MustOpen(cfg *config.AppConfig) *gorm.DB {
-{{ if eq .Driver "postgres" }}
-	db, err := gorm.Open(postgres.Open(cfg.{{ .DSNField }}), &gorm.Config{})
-{{ else if eq .Driver "mysql" }}
-	db, err := gorm.Open(mysql.Open(cfg.{{ .DSNField }}), &gorm.Config{})
-{{ else }}
-	// Unsupported driver: {{ .Driver }}
-	var db *gorm.DB
+// MustOpen{{ .FuncName }} opens the {{ .Driver }} connection and fatals on failure.
+func MustOpen{{ .FuncName }}(cfg *config.AppConfig) *{{ .TypeName }} {
+{{ if eq .Driver "postgres" }}	db, err := gorm.Open(postgres.Open(cfg.{{ .DSNField }}), &gorm.Config{})
+{{ else if eq .Driver "mysql" }}	db, err := gorm.Open(mysql.Open(cfg.{{ .DSNField }}), &gorm.Config{})
+{{ else }}	var db *gorm.DB
 	err := fmt.Errorf("unsupported db driver: {{ .Driver }}")
-{{ end }}
-	if err != nil {
-		log.Fatalf("database: failed to connect: %v", err)
+{{ end }}	if err != nil {
+		log.Fatalf("db {{ .FuncName }}: failed to connect: %v", err)
 	}
-	return db
+	return &{{ .TypeName }}{db}
 }
+{{ end }}

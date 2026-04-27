@@ -4,7 +4,7 @@ package {{ .Package }}
 import (
 	"context"
 
-	"{{ .Module }}/generated/lib/graph"
+	"github.com/stancil-gen/stancil-go/graph"
 {{ range .Imports }}	"{{ . }}"
 {{ end }})
 {{ if .InterfaceName }}

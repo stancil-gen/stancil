@@ -144,12 +144,13 @@ func (g *serviceGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.F
 			matched = true
 		}
 
-		// Check if this is an external dependency
+		// Check if this is an external interface dependency
 		if !matched {
-			for _, extImpl := range ctx.Spec.ImplsOfKind(spec.ExternalImpl) {
-				if extImpl.Name == bareName {
-					typeName = "*externals." + bareName
+			for _, extIface := range ctx.Spec.InterfacesOfKind(spec.ExternalInterface) {
+				if extIface.Name == bareName {
+					typeName = "externals." + bareName
 					addImport(module + "/generated/externals")
+					matched = true
 					break
 				}
 			}

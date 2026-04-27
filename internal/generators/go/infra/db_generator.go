@@ -8,10 +8,17 @@ import (
 	"stencil/internal/template"
 )
 
-type DBData struct {
-	Module   string
+type DBConnection struct {
+	TypeName string // "PostgresDB"
+	FuncName string // "Postgres" → MustOpenPostgres
 	Driver   string // "postgres" | "mysql" | "mongo"
-	DSNField string // the AppConfig field name for the DSN, e.g. "DatabaseUrl"
+	DSNField string // PascalCase config field name, e.g. "DatabaseUrl"
+}
+
+type DBData struct {
+	Module      string
+	Package     string
+	Connections []DBConnection
 }
 
 type dbGenerator struct {
@@ -27,22 +34,24 @@ func (g *dbGenerator) ID() string { return "go.db" }
 func (g *dbGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File, error) {
 	s := ctx.Spec
 
-	// Find the DATABASE_URL config var (conventional name)
-	dsnField := "DatabaseUrl" // default
-	for _, cv := range s.Config {
-		name := configToPascalCase(cv.Name)
-		if name == "DatabaseUrl" || name == "DbUrl" || name == "DatabaseDsn" {
-			dsnField = name
-			break
-		}
+	if len(s.Databases) == 0 {
+		return nil, nil // no databases declared — no db.go needed
 	}
 
-	driver := string(s.DB) // "postgres", "mysql", "mongo"
+	var connections []DBConnection
+	for _, db := range s.Databases {
+		connections = append(connections, DBConnection{
+			TypeName: db.TypeName,
+			FuncName: db.FuncName,
+			Driver:   string(db.Driver),
+			DSNField: db.URLField,
+		})
+	}
 
 	data := DBData{
-		Module:   s.Module,
-		Driver:   driver,
-		DSNField: dsnField,
+		Module:      s.Module,
+		Package:     "db",
+		Connections: connections,
 	}
 
 	content, err := g.engine.Render("go/infra/db.go.tmpl", data)

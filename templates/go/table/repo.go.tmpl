@@ -6,7 +6,10 @@ import (
 	"errors"
 	"time"
 {{ if .HasPagination }}
-	"{{ .Module }}/generated/lib/pagination"
+	"github.com/stancil-gen/stancil-go/pagination"
+{{ end }}
+{{ if .DBTypeName }}
+	"{{ .Module }}/generated/db"
 {{ end }}
 	"gorm.io/gorm"
 )
@@ -20,13 +23,18 @@ type {{ .InterfaceName }} interface {
 
 // {{ .ImplName }} implements {{ .InterfaceName }} using GORM.
 type {{ .ImplName }} struct {
-	db *gorm.DB
-}
+{{ if .DBTypeName }}	db *db.{{ .DBTypeName }}
+{{ else }}	db *gorm.DB
+{{ end }}}
 
 // New{{ .ImplName }} creates a new {{ .ImplName }}.
-func New{{ .ImplName }}(db *gorm.DB) *{{ .ImplName }} {
-	return &{{ .ImplName }}{db: db}
+{{ if .DBTypeName }}func New{{ .ImplName }}(d *db.{{ .DBTypeName }}) *{{ .ImplName }} {
+	return &{{ .ImplName }}{db: d}
 }
+{{ else }}func New{{ .ImplName }}(d *gorm.DB) *{{ .ImplName }} {
+	return &{{ .ImplName }}{db: d}
+}
+{{ end }}
 {{ range .Functions }}
 func (r *{{ $.ImplName }}) {{ .FuncName }}({{ .Params }}) {{ .Returns }} {
 {{- if eq .QueryKind "create" }}
