@@ -2,7 +2,11 @@ project: error_suite
 version: 1
 lang: go
 framework: gin
-db: postgres
+db:
+  - name: postgres
+    driver: postgres
+    framework: gorm
+    url: ${DATABASE_URL}
 
 # 1. Config Duplication & Missing Config for URL
 config:
