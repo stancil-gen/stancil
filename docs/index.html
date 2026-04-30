@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stancil — Deterministic Go Backend Code Generation</title>
+  <meta name="description" content="Write one YAML spec. Stancil generates 100% of the structural Go code. You write only the business logic." />
+
+  <!-- Syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --bg2:       #161b22;
+      --bg3:       #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #00d4a0;
+      --accent2:   #0ea5e9;
+      --warning:   #f59e0b;
+      --radius:    8px;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+    .nav-logo {
+      font-family: var(--font-mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    .nav-links {
+      display: flex;
+      gap: 1.75rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--muted);
+      font-size: 0.9rem;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-github {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted) !important;
+      font-size: 0.9rem;
+    }
+
+    /* ── Sections ── */
+    section { padding: 5rem 2rem; }
+    .container { max-width: 860px; margin: 0 auto; }
+    .container-wide { max-width: 1060px; margin: 0 auto; }
+
+    h2 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    .lead {
+      font-size: 1.05rem;
+      color: var(--muted);
+      margin-bottom: 2rem;
+      max-width: 640px;
+    }
+
+    /* ── Hero ── */
+    #hero {
+      padding: 7rem 2rem 6rem;
+      text-align: center;
+      background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,212,160,0.08), transparent);
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(0,212,160,0.1);
+      border: 1px solid rgba(0,212,160,0.25);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.3rem 0.9rem;
+      border-radius: 100px;
+      margin-bottom: 1.75rem;
+      letter-spacing: 0.5px;
+    }
+    .hero-title {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 1.25rem;
+      letter-spacing: -1px;
+    }
+    .hero-title span { color: var(--accent); }
+    .hero-sub {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.7;
+    }
+    .install-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      position: relative;
+      margin-bottom: 2rem;
+    }
+    .install-box:hover { border-color: var(--accent); }
+    .install-box .prompt { color: var(--accent); user-select: none; }
+    .copy-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 0;
+      transition: color 0.15s;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .copy-btn:hover { color: var(--accent); }
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.65rem 1.4rem;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.15s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-primary:hover { background: #00e8b0; text-decoration: none; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-top: 4rem;
+    }
+    .stat {
+      background: var(--bg2);
+      padding: 1.75rem;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      line-height: 1;
+      margin-bottom: 0.4rem;
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    /* ── How it works ── */
+    #how { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 2rem 0;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+    .pipeline-step {
+      flex: 1;
+      min-width: 110px;
+      text-align: center;
+      padding: 1rem 0.5rem;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .pipeline-step:not(:last-child) {
+      border-right: none;
+      border-radius: var(--radius) 0 0 var(--radius);
+    }
+    .pipeline-step + .pipeline-step {
+      border-radius: 0;
+    }
+    .pipeline-step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+    .pipeline-num {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--accent);
+      margin-bottom: 0.25rem;
+    }
+    .pipeline-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .pipeline-desc {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+    .pipeline-arrow {
+      color: var(--border);
+      font-size: 1.2rem;
+      padding: 0 0.25rem;
+      flex-shrink: 0;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    @media (max-width: 680px) {
+      .two-col { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: 1fr; }
+      .pipeline { flex-wrap: wrap; }
+    }
+
+    .card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .card-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
+
+    /* ── Quick start ── */
+    .steps { display: flex; flex-direction: column; gap: 1.25rem; margin-top: 2rem; }
+    .step {
+      display: flex;
+      gap: 1.25rem;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: rgba(0,212,160,0.12);
+      border: 1px solid rgba(0,212,160,0.3);
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.1rem;
+    }
+    .step-body h3 { margin-bottom: 0.4rem; }
+    .step-body p { color: var(--muted); font-size: 0.93rem; }
+
+    /* ── Code ── */
+    pre {
+      background: var(--bg2) !important;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 1rem 0;
+    }
+    pre code { font-family: var(--font-mono) !important; background: none !important; padding: 0 !important; }
+    code {
+      font-family: var(--font-mono);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      font-size: 0.85em;
+      color: var(--accent);
+    }
+    pre code { color: inherit; border: none; padding: 0; font-size: inherit; background: none; }
+
+    .code-label {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: -0.5rem;
+      padding-left: 0.25rem;
+    }
+
+    /* ── Spec table ── */
+    .spec-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    @media (max-width: 680px) { .spec-grid { grid-template-columns: 1fr; } }
+
+    /* ── Hooks ── */
+    .hook-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 1.5rem 0;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .hook-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .hook-row:last-child { border-bottom: none; }
+    .hook-row.hook { background: rgba(0,212,160,0.05); color: var(--text); }
+    .hook-row.hook .hook-tag {
+      background: rgba(0,212,160,0.15);
+      color: var(--accent);
+      border-radius: 4px;
+      padding: 0.1em 0.5em;
+      font-size: 0.72rem;
+    }
+    .hook-arrow { color: var(--border); }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <span class="nav-logo">⬡ stancil</span>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#quickstart">Quick start</a></li>
+    <li><a href="#hooks">Hooks</a></li>
+    <li><a href="#spec">Spec</a></li>
+  </ul>
+  <a href="https://github.com/stancil-gen/stancil" class="nav-github" target="_blank">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+    GitHub
+  </a>
+</nav>
+
+<!-- ── Hero ── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-badge">v0.1.0 — open source</div>
+    <h1 class="hero-title">
+      Write the spec.<br />
+      <span>Skip the boilerplate.</span>
+    </h1>
+    <p class="hero-sub">
+      Stancil generates 100% of your Go backend's structural code from a single YAML file —
+      models, repos, handlers, services, DI wiring. You only write the business logic.
+    </p>
+
+    <div>
+      <div class="install-box" onclick="copyInstall(this)">
+        <span class="prompt">$</span>
+        <span id="install-cmd">curl -fsSL https://raw.githubusercontent.com/stancil-gen/stancil/main/install.sh | sh</span>
+        <button class="copy-btn" id="copy-label">copy</button>
+      </div>
+    </div>
+
+    <div class="hero-actions">
+      <a href="#quickstart" class="btn btn-primary">Get started</a>
+      <a href="https://github.com/stancil-gen/stancil" class="btn btn-outline" target="_blank">
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="stats container-wide" style="margin-top: 3.5rem;">
+      <div class="stat">
+        <div class="stat-value">~85%</div>
+        <div class="stat-label">fewer tokens for AI-assisted backend dev</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">0</div>
+        <div class="stat-label">runtime dependencies — single static binary</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">1</div>
+        <div class="stat-label">YAML file to describe your entire service</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How it works ── -->
+<section id="how">
+  <div class="container">
+    <p class="section-label">How it works</p>
+    <h2>One spec. All the structure.</h2>
+    <p class="lead">
+      Stancil reads your spec, runs a 6-stage pipeline, and writes every structural file into a read-only
+      <code>generated/</code> directory. Your business logic lives in <code>hooks/</code> — a directory
+      the tool never touches.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipeline-step">
+        <div class="pipeline-num">01</div>
+        <div class="pipeline-name">parse</div>
+        <div class="pipeline-desc">YAML → AST</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">02</div>
+        <div class="pipeline-name">validate</div>
+        <div class="pipeline-desc">catch all errors</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">03</div>
+        <div class="pipeline-name">resolve</div>
+        <div class="pipeline-desc">fill defaults</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">04</div>
+        <div class="pipeline-name">plan</div>
+        <div class="pipeline-desc">DAG ordering</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">05</div>
+        <div class="pipeline-name">generate</div>
+        <div class="pipeline-desc">render templates</div>
+      </div>
+      <div class="pipeline-arrow">›</div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">06</div>
+        <div class="pipeline-name">emit</div>
+        <div class="pipeline-desc">write → lock</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-icon">🔒</div>
+        <h3>generated/ is read-only</h3>
+        <p style="color:var(--muted);font-size:0.93rem;">Every generated file is locked with <code>chmod 444</code> and the macOS <code>uchg</code> immutable flag. You can't accidentally edit it. Run <code>stencil generate</code> to update it.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🪝</div>
+        <h3>hooks/ is yours</h3>
+        <p style="color:var(--muted);font-size:0.93rem;">The generator never reads or modifies <code>hooks/</code>. Every hook is optional — unset hooks are skipped. You only implement what the generator can't infer.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Quick start ── -->
+<section id="quickstart">
+  <div class="container">
+    <p class="section-label">Quick start</p>
+    <h2>Up and running in 5 steps</h2>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Install stencil</h3>
+          <p>One command installs the binary to <code>/usr/local/bin</code> on macOS or Linux.</p>
+          <pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/stancil-gen/stancil/main/install.sh | sh</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Write a spec</h3>
+          <p>Describe your service in <code>stancil.yaml</code> — tables, databases, API endpoints, external HTTP clients.</p>
+          <pre><code class="language-yaml">version: 1
+project: my-service
+lang: go
+framework: gin
+
+config:
+  - name: DATABASE_URL   type: str   required: true
+
+db:
+  - name: postgres
+    driver: postgres
+    framework: gorm
+    url: ${DATABASE_URL}
+
+tables:
+  - name: tasks
+    db: postgres
+    fields:
+      - name: title   type: str   required: true
+      - name: done    type: bool  default: false
+
+resources:
+  - group: TaskAPIs
+    base_path: /tasks
+    apis:
+      - name: CreateTask
+        method: POST
+        path: /
+        dtos:
+          request:
+            name: CreateTaskRequest
+            fields:
+              - name: title   type: str   required: true
+          response:
+            name: CreateTaskResponse
+            fields:
+              - name: id      type: uuid
+              - name: title   type: str
+        steps:
+          - id: writeTask
+            touch: {table: tasks, op: create}
+            fatal: true</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Generate</h3>
+          <p>Stancil writes all models, repos, handlers, services, DI wiring, and <code>go.mod</code> in under a second.</p>
+          <pre><code class="language-bash">stencil generate stancil.yaml</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Write your hooks</h3>
+          <p>Implement only the business logic the generator can't infer — password hashing, response mapping, conditional logic.</p>
+          <pre><code class="language-go">// hooks/task_hooks.go
+func (h *Impl) BeforeResponse(ctx context.Context,
+    shared *task_ap_is.CreateTaskContext) error {
+
+    shared.Response = &task_ap_is.CreateTaskResponse{
+        Id:    shared.WriteTaskOutput.ID,
+        Title: shared.WriteTaskOutput.Title,
+    }
+    return nil
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <h3>Run</h3>
+          <pre><code class="language-bash">go mod tidy && go run main.go</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Hooks ── -->
+<section id="hooks" style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="container">
+    <p class="section-label">Hooks</p>
+    <h2>Business logic, precisely placed</h2>
+    <p class="lead">
+      Every API execution flows through a shared context struct. Generated code calls infrastructure and
+      stores results on it. Your hooks read those results and decide what happens next.
+    </p>
+
+    <div class="hook-flow">
+      <div class="hook-row hook">
+        <span class="hook-tag">hook</span>
+        <span>BeforePlaceOrder — validate request, reject early without hitting DB or Stripe</span>
+      </div>
+      <div class="hook-row">
+        <span class="hook-arrow">↓</span>
+        <span>generated: call Stripe ChargeCard → result stored in shared.ChargePaymentOutput</span>
+      </div>
+      <div class="hook-row hook">
+        <span class="hook-tag">hook</span>
+        <span>AfterStripeClientChargeCard — log charge ID, handle non-fatal failure</span>
+      </div>
+      <div class="hook-row">
+        <span class="hook-arrow">↓</span>
+        <span>generated: insert order row → result stored in shared.WriteOrderOutput</span>
+      </div>
+      <div class="hook-row hook">
+        <span class="hook-tag">hook</span>
+        <span>BeforeResponse — combine charge ID + order ID into the response DTO</span>
+      </div>
+    </div>
+
+    <pre><code class="language-go">// hooks/order_hooks.go — only the logic that matters
+
+// Hash password before DB write — generated code can't do this
+func (h *Impl) BeforeTableUsersCreate(ctx context.Context,
+    shared *user_ap_is.CreateUserContext) error {
+
+    hash := sha256.Sum256([]byte(shared.Request.Password))
+    shared.WriteUserInput.PasswordHash = fmt.Sprintf("%x", hash)
+    return nil
+}
+
+// Build response from two separate infra results
+func (h *Impl) BeforeResponse(ctx context.Context,
+    shared *order_ap_is.PlaceOrderContext) error {
+
+    shared.Response = &order_ap_is.PlaceOrderResponse{
+        OrderId:  shared.WriteOrderOutput.ID,   // from DB
+        ChargeId: shared.ChargePaymentOutput.Id, // from Stripe
+        Status:   string(shared.WriteOrderOutput.Status),
+    }
+    return nil
+}</code></pre>
+
+    <p style="color:var(--muted);font-size:0.93rem;margin-top:1rem;">
+      Hook fields that are <code>nil</code> are silently skipped by the executor —
+      you only wire the ones you need.
+    </p>
+  </div>
+</section>
+
+<!-- ── Spec reference ── -->
+<section id="spec">
+  <div class="container-wide" style="max-width:1000px;margin:0 auto;">
+    <p class="section-label">Spec reference</p>
+    <h2>Everything the spec supports</h2>
+    <p class="lead">A <code>stancil.yaml</code> describes your entire service. Each block maps directly to generated code.</p>
+
+    <div class="spec-grid">
+
+      <div>
+        <p class="code-label">config — environment variables</p>
+        <pre><code class="language-yaml">config:
+  - name: DATABASE_URL
+    type: str
+    required: true
+  - name: PORT
+    type: int
+    default: 8080</code></pre>
+      </div>
+
+      <div>
+        <p class="code-label">db — database connections</p>
+        <pre><code class="language-yaml">db:
+  - name: postgres
+    driver: postgres    # postgres | mysql | mongo
+    framework: gorm     # gorm | sqlx | sqlc
+    url: ${DATABASE_URL}</code></pre>
+      </div>
+
+      <div>
+        <p class="code-label">tables — database tables</p>
+        <pre><code class="language-yaml">tables:
+  - name: users
+    db: postgres
+    fields:
+      - name: email    type: str   required: true   unique: true
+      - name: password type: str   required: true   private: true
+      - name: role     type: enum  values: [admin, user]
+    queries:
+      - find_by: [email]
+      - paginate: offset
+    errors:
+      - code: NOT_FOUND   name: NotFound</code></pre>
+      </div>
+
+      <div>
+        <p class="code-label">externals — outbound HTTP clients</p>
+        <pre><code class="language-yaml">externals:
+  - name: StripeClient
+    type: http
+    base_url: ${STRIPE_URL}
+    auth: bearer_token
+    timeout: 10s
+    retry:
+      attempts: 3
+      backoff: exponential
+      on_status: [429, 502, 503]
+    calls:
+      - name: ChargeCard
+        method: POST
+        path: /v1/charges
+        body:
+          name: ChargeRequest
+          fields:
+            - name: amount   type: int   required: true</code></pre>
+      </div>
+
+      <div>
+        <p class="code-label">resources — API endpoints</p>
+        <pre><code class="language-yaml">resources:
+  - group: OrderAPIs
+    base_path: /orders
+    apis:
+      - name: PlaceOrder
+        method: POST
+        path: /
+        steps:
+          - id: chargePayment
+            touch: {external: StripeClient, method: ChargeCard}
+            fatal: true
+          - id: writeOrder
+            touch: {table: orders, op: create}
+            fatal: true</code></pre>
+      </div>
+
+      <div>
+        <p class="code-label">field types</p>
+        <pre><code class="language-yaml"># Available field types
+str        → string
+int        → int64
+uuid       → uuid.UUID
+bool       → bool
+decimal    → decimal.Decimal
+timestamp  → time.Time
+date       → time.Time
+json       → json.RawMessage
+enum       → string + values list</code></pre>
+
+        <p class="code-label" style="margin-top:1rem;">CLI commands</p>
+        <pre><code class="language-bash">stencil generate stancil.yaml
+stencil generate stancil.yaml --force
+stencil validate stancil.yaml
+stencil diff stancil.yaml
+stencil version</code></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <p>
+    Built with Go ·
+    <a href="https://github.com/stancil-gen/stancil" target="_blank">stancil</a> ·
+    <a href="https://github.com/stancil-gen/stancil-go" target="_blank">stancil-go</a>
+  </p>
+  <p style="margin-top:0.5rem;">Released under the MIT License</p>
+</footer>
+
+<script>
+  // Syntax highlighting
+  hljs.highlightAll();
+
+  // Copy install command
+  function copyInstall(el) {
+    const cmd = document.getElementById('install-cmd').textContent;
+    navigator.clipboard.writeText(cmd).then(() => {
+      const btn = document.getElementById('copy-label');
+      btn.textContent = '✓ copied';
+      btn.style.color = 'var(--accent)';
+      setTimeout(() => {
+        btn.textContent = 'copy';
+        btn.style.color = '';
+      }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>
