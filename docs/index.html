@@ -406,14 +406,108 @@
       padding-left: 0.25rem;
     }
 
-    /* ── Spec table ── */
-    .spec-grid {
+    /* ── Spec tabs ── */
+    .spec-tabs {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
+      grid-template-columns: 200px 1fr;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
       margin-top: 2rem;
+      min-height: 500px;
     }
-    @media (max-width: 680px) { .spec-grid { grid-template-columns: 1fr; } }
+    .spec-sidebar {
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+    .spec-tab {
+      background: none;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.25rem;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .spec-tab:last-child { border-bottom: none; }
+    .spec-tab:hover { background: var(--bg3); }
+    .spec-tab.active {
+      background: var(--bg3);
+      border-left: 2px solid var(--accent);
+    }
+    .spec-tab-name {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .spec-tab.active .spec-tab-name { color: var(--accent); }
+    .spec-tab-desc {
+      font-size: 0.75rem;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+    .spec-panel {
+      background: var(--bg);
+      padding: 2rem;
+      overflow-y: auto;
+    }
+    .spec-content { display: none; }
+    .spec-content.active { display: block; }
+    .spec-content h3 {
+      font-size: 1.15rem;
+      margin-bottom: 0.6rem;
+      color: var(--text);
+    }
+    .spec-desc {
+      color: var(--muted);
+      font-size: 0.93rem;
+      margin-bottom: 1.5rem;
+      line-height: 1.65;
+    }
+    .generates-block {
+      margin-bottom: 1.5rem;
+    }
+    .gen-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 0.6rem;
+    }
+    .generates-files { display: flex; flex-direction: column; gap: 0.5rem; }
+    .gen-file {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      padding: 0.65rem 1rem;
+      background: rgba(0,212,160,0.04);
+      border: 1px solid rgba(0,212,160,0.15);
+      border-radius: 6px;
+    }
+    .gen-file-name {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+    }
+    .gen-file-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    @media (max-width: 680px) {
+      .spec-tabs { grid-template-columns: 1fr; }
+      .spec-sidebar { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      .spec-tab { border-bottom: none; border-right: 1px solid var(--border); white-space: nowrap; }
+      .spec-tab.active { border-left: none; border-bottom: 2px solid var(--accent); }
+    }
 
     /* ── Hooks ── */
     .hook-flow {
@@ -776,60 +870,167 @@ func (h *Impl) BeforeResponse(ctx context.Context,
 
 <!-- ── Spec reference ── -->
 <section id="spec">
-  <div class="container-wide" style="max-width:1000px;margin:0 auto;">
+  <div class="container" style="max-width:960px;">
     <p class="section-label">Spec reference</p>
-    <h2>Everything the spec supports</h2>
-    <p class="lead">A <code>stancil.yaml</code> describes your entire service. Each block maps directly to generated code.</p>
+    <h2>Every block in stancil.yaml</h2>
+    <p class="lead">Click a block to see what it does, what files it generates, and how to write it.</p>
 
-    <div class="spec-grid">
+    <div class="spec-tabs">
 
-      <div>
-        <p class="code-label">config — environment variables</p>
-        <pre><code class="language-yaml">config:
+      <!-- Sidebar -->
+      <div class="spec-sidebar">
+        <button class="spec-tab active" onclick="showTab('config', this)">
+          <span class="spec-tab-name">config</span>
+          <span class="spec-tab-desc">Environment variables</span>
+        </button>
+        <button class="spec-tab" onclick="showTab('db', this)">
+          <span class="spec-tab-name">db</span>
+          <span class="spec-tab-desc">Database connections</span>
+        </button>
+        <button class="spec-tab" onclick="showTab('tables', this)">
+          <span class="spec-tab-name">tables</span>
+          <span class="spec-tab-desc">Database tables &amp; queries</span>
+        </button>
+        <button class="spec-tab" onclick="showTab('externals', this)">
+          <span class="spec-tab-name">externals</span>
+          <span class="spec-tab-desc">Outbound HTTP clients</span>
+        </button>
+        <button class="spec-tab" onclick="showTab('resources', this)">
+          <span class="spec-tab-name">resources</span>
+          <span class="spec-tab-desc">API endpoints &amp; steps</span>
+        </button>
+        <button class="spec-tab" onclick="showTab('types', this)">
+          <span class="spec-tab-name">types</span>
+          <span class="spec-tab-desc">Custom value objects</span>
+        </button>
+      </div>
+
+      <!-- Panel -->
+      <div class="spec-panel">
+
+        <!-- config -->
+        <div id="tab-config" class="spec-content active">
+          <h3>config — Environment variables</h3>
+          <p class="spec-desc">Declares all environment variables your service reads at startup. Stancil validates that every <code>${VAR}</code> reference in your spec (database URLs, API keys) is declared here.</p>
+
+          <div class="generates-block">
+            <span class="gen-label">generates</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/config/config.go</span>
+                <span class="gen-file-desc">Typed <code>AppConfig</code> struct + <code>Load()</code> that reads from environment</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">config:
   - name: DATABASE_URL
     type: str
     required: true
+
+  - name: STRIPE_URL
+    type: str
+    required: true
+
   - name: PORT
     type: int
-    default: 8080</code></pre>
-      </div>
+    default: 8080
 
-      <div>
-        <p class="code-label">db — database connections</p>
-        <pre><code class="language-yaml">db:
-  - name: postgres
-    driver: postgres    # postgres | mysql | mongo
-    framework: gorm     # gorm | sqlx | sqlc
-    url: ${DATABASE_URL}</code></pre>
-      </div>
+# Types: str, int, bool</code></pre>
+        </div>
 
-      <div>
-        <p class="code-label">tables — database tables</p>
-        <pre><code class="language-yaml">tables:
+        <!-- db -->
+        <div id="tab-db" class="spec-content">
+          <h3>db — Database connections</h3>
+          <p class="spec-desc">Declares one or more database connections. Each entry gets its own named Go type (e.g. <code>PostgresDB</code>) so multiple databases can coexist in one service without DI collisions. The <code>url</code> field must reference a declared <code>config</code> variable.</p>
+
+          <div class="generates-block">
+            <span class="gen-label">generates</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/db/db.go</span>
+                <span class="gen-file-desc">Named connection type (<code>type PostgresDB struct</code>) + <code>MustOpenPostgres(cfg)</code> factory</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">db:
+  - name: postgres          # identifier used by tables
+    driver: postgres        # postgres | mysql | mongo
+    framework: gorm         # gorm | sqlx | sqlc (default: gorm)
+    url: ${DATABASE_URL}    # must reference a config var
+
+  # Multiple databases supported
+  - name: analytics
+    driver: postgres
+    framework: gorm
+    url: ${ANALYTICS_URL}</code></pre>
+        </div>
+
+        <!-- tables -->
+        <div id="tab-tables" class="spec-content">
+          <h3>tables — Database tables</h3>
+          <p class="spec-desc">Declares database tables with typed fields, query shorthands, optional state machines, and domain errors. Stancil auto-generates <code>id</code>, <code>created_at</code>, and <code>updated_at</code> — you never declare them. Fields marked <code>private: true</code> are stored in the DB but excluded from all response DTOs.</p>
+
+          <div class="generates-block">
+            <span class="gen-label">generates per table</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/tables/{name}/model.go</span>
+                <span class="gen-file-desc">Typed struct, enum constants, domain error vars</span>
+              </div>
+              <div class="gen-file">
+                <span class="gen-file-name">generated/tables/{name}/repository.go</span>
+                <span class="gen-file-desc"><code>{Name}Repository</code> interface + full GORM implementation</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">tables:
   - name: users
-    db: postgres
+    db: postgres          # which database (defaults to only db if one declared)
     fields:
-      - name: email    type: str   required: true   unique: true
-      - name: password type: str   required: true   private: true
-      - name: role     type: enum  values: [admin, user]
+      - name: email       type: str    required: true   unique: true
+      - name: name        type: str    required: true
+      - name: password    type: str    required: true   private: true
+      - name: role        type: enum   values: [admin, user]   default: user
+      - name: status      type: enum   values: [active, suspended]
     queries:
-      - find_by: [email]
-      - paginate: offset
+      - find_by: [email]        # → FindByEmail(ctx, email) (*User, error)
+      - find_by: [status]       # → FindByStatus(ctx, status) ([]*User, error)
+      - paginate: offset        # → Paginate(ctx, page, limit) (*OffsetPage[User], error)
+      - soft_delete: true       # → SoftDelete(ctx, id) error
     errors:
-      - code: NOT_FOUND   name: NotFound</code></pre>
-      </div>
+      - code: NOT_FOUND    name: NotFound
+      - code: EMAIL_TAKEN  name: EmailTaken
 
-      <div>
-        <p class="code-label">externals — outbound HTTP clients</p>
-        <pre><code class="language-yaml">externals:
+# Field types: str, int, uuid, bool, decimal, timestamp, date, json, enum</code></pre>
+        </div>
+
+        <!-- externals -->
+        <div id="tab-externals" class="spec-content">
+          <h3>externals — Outbound HTTP clients</h3>
+          <p class="spec-desc">Declares typed HTTP clients for third-party APIs and internal services. Each call gets a typed request body, response struct, and error mappings. Retry logic (exponential/linear backoff) is configured once and applied by the generated client automatically.</p>
+
+          <div class="generates-block">
+            <span class="gen-label">generates per external</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/externals/{name}.go</span>
+                <span class="gen-file-desc">Typed interface, full HTTP implementation with retry, body types, error sentinels</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">externals:
   - name: StripeClient
     type: http
     base_url: ${STRIPE_URL}
-    auth: bearer_token
+    auth: bearer_token      # bearer_token | api_key | none
     timeout: 10s
     retry:
       attempts: 3
-      backoff: exponential
+      backoff: exponential  # exponential | linear | none
       on_status: [429, 502, 503]
     calls:
       - name: ChargeCard
@@ -838,49 +1039,117 @@ func (h *Impl) BeforeResponse(ctx context.Context,
         body:
           name: ChargeRequest
           fields:
-            - name: amount   type: int   required: true</code></pre>
-      </div>
+            - name: amount    type: int   required: true
+            - name: currency  type: str   required: true
+            - name: source    type: str   required: true
+        response:
+          name: ChargeResponse
+          fields:
+            - name: id      type: str
+            - name: status  type: str
+        errors:
+          - status: 402   error: CardDeclined
+          - status: 429   error: RateLimited</code></pre>
+        </div>
 
-      <div>
-        <p class="code-label">resources — API endpoints</p>
-        <pre><code class="language-yaml">resources:
+        <!-- resources -->
+        <div id="tab-resources" class="spec-content">
+          <h3>resources — API endpoints</h3>
+          <p class="spec-desc">Declares HTTP endpoint groups. Each API declares ordered <code>steps</code> — touches to infra (DB, external client). The generated service executor runs the steps in order, storing results on a typed <code>shared context</code> struct. Your hooks read those results and control what happens next.</p>
+
+          <div class="generates-block">
+            <span class="gen-label">generates per API group</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/apis/{group}/dto.go</span>
+                <span class="gen-file-desc">Request + response DTO structs with validation tags</span>
+              </div>
+              <div class="gen-file">
+                <span class="gen-file-name">generated/apis/{group}/context.go</span>
+                <span class="gen-file-desc">Shared context struct holding request, step inputs/outputs, response</span>
+              </div>
+              <div class="gen-file">
+                <span class="gen-file-name">generated/apis/{group}/hooks.go</span>
+                <span class="gen-file-desc">Hook interface — your extension points for business logic</span>
+              </div>
+              <div class="gen-file">
+                <span class="gen-file-name">generated/apis/{group}/service.go</span>
+                <span class="gen-file-desc">Step executor — reads shared context, calls infra, stores results</span>
+              </div>
+              <div class="gen-file">
+                <span class="gen-file-name">generated/apis/{group}/handler.go</span>
+                <span class="gen-file-desc">HTTP handler — bind, validate, call service, respond</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">resources:
   - group: OrderAPIs
     base_path: /orders
+    auth: public            # public | jwt
+
     apis:
       - name: PlaceOrder
         method: POST
         path: /
+        dtos:
+          request:
+            name: PlaceOrderRequest
+            fields:
+              - name: user_id        type: uuid   required: true
+              - name: payment_token  type: str    required: true
+              - name: amount         type: int    required: true
+          response:
+            name: PlaceOrderResponse
+            fields:
+              - name: order_id   type: uuid
+              - name: charge_id  type: str
+              - name: status     type: str
         steps:
           - id: chargePayment
             touch: {external: StripeClient, method: ChargeCard}
-            fatal: true
+            fatal: true       # abort on failure
           - id: writeOrder
             touch: {table: orders, op: create}
-            fatal: true</code></pre>
-      </div>
+            fatal: true
 
-      <div>
-        <p class="code-label">field types</p>
-        <pre><code class="language-yaml"># Available field types
-str        → string
-int        → int64
-uuid       → uuid.UUID
-bool       → bool
-decimal    → decimal.Decimal
-timestamp  → time.Time
-date       → time.Time
-json       → json.RawMessage
-enum       → string + values list</code></pre>
+# touch op values for tables: create | get | update | delete | list</code></pre>
+        </div>
 
-        <p class="code-label" style="margin-top:1rem;">CLI commands</p>
-        <pre><code class="language-bash">stencil generate stancil.yaml
-stencil generate stancil.yaml --force
-stencil validate stancil.yaml
-stencil diff stancil.yaml
-stencil version</code></pre>
-      </div>
+        <!-- types -->
+        <div id="tab-types" class="spec-content">
+          <h3>types — Custom value objects</h3>
+          <p class="spec-desc">Declares reusable composite types like <code>Money</code> or <code>Address</code>. These are embedded as structured fields inside table models. Generated as proper Go structs with JSON and DB tags — not raw JSON blobs.</p>
 
-    </div>
+          <div class="generates-block">
+            <span class="gen-label">generates per type</span>
+            <div class="generates-files">
+              <div class="gen-file">
+                <span class="gen-file-name">generated/types/types.go</span>
+                <span class="gen-file-desc">Typed Go struct with JSON tags, usable as a table field type</span>
+              </div>
+            </div>
+          </div>
+
+          <pre><code class="language-yaml">types:
+  - name: Money
+    fields:
+      - name: amount    type: decimal   required: true
+      - name: currency  type: str       required: true
+
+  - name: Address
+    fields:
+      - name: line1    type: str   required: true
+      - name: city     type: str   required: true
+      - name: country  type: str   required: true
+
+# Use in a table field:
+# - name: total   type: Money   required: true
+# - name: billing type: Address</code></pre>
+        </div>
+
+      </div><!-- /spec-panel -->
+    </div><!-- /spec-tabs -->
   </div>
 </section>
 
@@ -895,7 +1164,6 @@ stencil version</code></pre>
 </footer>
 
 <script>
-  // Syntax highlighting
   hljs.highlightAll();
 
   // Copy install command
@@ -905,10 +1173,19 @@ stencil version</code></pre>
       const btn = document.getElementById('copy-label');
       btn.textContent = '✓ copied';
       btn.style.color = 'var(--accent)';
-      setTimeout(() => {
-        btn.textContent = 'copy';
-        btn.style.color = '';
-      }, 2000);
+      setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 2000);
+    });
+  }
+
+  // Spec tab switching
+  function showTab(id, btn) {
+    document.querySelectorAll('.spec-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.spec-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    btn.classList.add('active');
+    // Re-highlight new content
+    document.getElementById('tab-' + id).querySelectorAll('pre code').forEach(el => {
+      if (!el.dataset.highlighted) hljs.highlightElement(el);
     });
   }
 </script>
