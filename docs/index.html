@@ -509,6 +509,61 @@
       .spec-tab.active { border-left: none; border-bottom: 2px solid var(--accent); }
     }
 
+    /* ── CLI command list ── */
+    .cmd-list { display: flex; flex-direction: column; gap: 0; }
+    .cmd-item {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmd-item:last-child { border-bottom: none; }
+    .cmd-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .cmd-name {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      padding: 0.25em 0.7em;
+      border-radius: 6px;
+    }
+    .cmd-tag {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      background: rgba(0,212,160,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(0,212,160,0.25);
+      padding: 0.15em 0.55em;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .cmd-tag-debug {
+      background: rgba(139,148,158,0.1);
+      color: var(--muted);
+      border-color: rgba(139,148,158,0.25);
+    }
+    .cmd-desc {
+      color: var(--muted);
+      font-size: 0.91rem;
+      line-height: 1.65;
+      margin-bottom: 0;
+    }
+    .cmd-flags { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem; }
+    .cmd-flag {
+      display: flex;
+      gap: 1rem;
+      align-items: baseline;
+      font-size: 0.88rem;
+    }
+    .cmd-flag code { flex-shrink: 0; font-size: 0.82rem; }
+    .cmd-flag span { color: var(--muted); }
+
     /* ── Hooks ── */
     .hook-flow {
       display: flex;
@@ -903,6 +958,10 @@ func (h *Impl) BeforeResponse(ctx context.Context,
           <span class="spec-tab-name">types</span>
           <span class="spec-tab-desc">Custom value objects</span>
         </button>
+        <button class="spec-tab" onclick="showTab('cli', this)">
+          <span class="spec-tab-name">CLI</span>
+          <span class="spec-tab-desc">Commands &amp; flags</span>
+        </button>
       </div>
 
       <!-- Panel -->
@@ -1146,6 +1205,80 @@ func (h *Impl) BeforeResponse(ctx context.Context,
 # Use in a table field:
 # - name: total   type: Money   required: true
 # - name: billing type: Address</code></pre>
+        </div>
+
+        <!-- cli -->
+        <div id="tab-cli" class="spec-content">
+          <h3>CLI — Commands &amp; flags</h3>
+          <p class="spec-desc">All stencil commands operate on a <code>stancil.yaml</code> spec file. Every command that reads the spec validates it first and reports all errors before doing anything else.</p>
+
+          <div class="cmd-list">
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil generate &lt;file&gt;</code>
+                <span class="cmd-tag">primary</span>
+              </div>
+              <p class="cmd-desc">Reads the spec, generates all code into <code>generated/</code>, and locks the output read-only. On subsequent runs, only files whose spec content changed are regenerated. Scaffold files (<code>main.go</code>, <code>go.mod</code>, <code>hooks/register.go</code>) are written once and never overwritten.</p>
+              <div class="cmd-flags">
+                <div class="cmd-flag"><code>--force</code><span>Regenerate all files even if the spec has not changed</span></div>
+              </div>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil validate &lt;file&gt;</code>
+              </div>
+              <p class="cmd-desc">Parses and validates the spec without generating anything. Reports every error at once — never stops at the first one. Use this before committing a spec change to catch mistakes early.</p>
+              <pre style="margin-top:0.75rem;"><code class="language-bash">stencil validate stancil.yaml
+# → VALIDATION SUCCESS — No errors found.
+# or
+# → [TABLE_AMBIGUOUS_DB] tables.orders: table "orders" does not declare a db: field</code></pre>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil diff &lt;file&gt;</code>
+              </div>
+              <p class="cmd-desc">Shows a unified diff of what would change if you ran <code>generate</code> now — without writing anything to disk. Useful for reviewing spec changes in CI or before a release.</p>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil version</code>
+              </div>
+              <p class="cmd-desc">Prints the installed stencil version, git commit, and build date.</p>
+              <pre style="margin-top:0.75rem;"><code class="language-bash">stencil version
+# stencil v0.1.0
+#   commit : a3f9c12
+#   built  : 2026-04-28</code></pre>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil parse &lt;file&gt;</code>
+                <span class="cmd-tag cmd-tag-debug">debug</span>
+              </div>
+              <p class="cmd-desc">Prints the raw parsed AST as JSON. Useful for verifying that the YAML is being read exactly as written before the resolver fills in defaults.</p>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil resolve &lt;file&gt;</code>
+                <span class="cmd-tag cmd-tag-debug">debug</span>
+              </div>
+              <p class="cmd-desc">Prints the fully resolved intermediate representation — after all defaults are filled, types are inferred, and interfaces are derived. Shows exactly what the generators see.</p>
+            </div>
+
+            <div class="cmd-item">
+              <div class="cmd-header">
+                <code class="cmd-name">stencil plan &lt;file&gt;</code>
+                <span class="cmd-tag cmd-tag-debug">debug</span>
+              </div>
+              <p class="cmd-desc">Prints the DAG execution plan — which generators run in which parallel tier. Useful when writing a new generator to verify it's placed in the right dependency tier.</p>
+            </div>
+
+          </div>
         </div>
 
       </div><!-- /spec-panel -->
