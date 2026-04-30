@@ -431,7 +431,7 @@ func (c *Checker) validateStateMachine(table spec.TableAST, path string) {
 // CheckPrimitive verifies if a type is a native Stencil primitive
 func (c *Checker) isPrimitive(t string) bool {
 	switch t {
-	case "str", "int", "uuid", "bool", "decimal", "timestamp", "json", "enum", "date":
+	case "str", "int", "uint", "uuid", "bool", "decimal", "timestamp", "json", "enum", "date":
 		return true
 	}
 	return false

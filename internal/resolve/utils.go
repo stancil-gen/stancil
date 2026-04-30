@@ -20,6 +20,8 @@ func mapTypeKind(yamlType string) spec.TypeKind {
 		return spec.TypeStr
 	case "int", "integer":
 		return spec.TypeInt
+	case "uint":
+		return spec.TypeUint
 	case "bool", "boolean":
 		return spec.TypeBool
 	case "decimal", "float", "number":
@@ -48,6 +50,8 @@ func mapDBType(yamlType string, nullable bool) string {
 	case "str", "string":
 		base = "VARCHAR(255)"
 	case "int", "integer":
+		base = "BIGINT"
+	case "uint":
 		base = "BIGINT"
 	case "bool", "boolean":
 		base = "BOOLEAN"

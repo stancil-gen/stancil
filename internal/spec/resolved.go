@@ -31,6 +31,7 @@ type TypeKind int
 const (
 	TypeStr       TypeKind = iota
 	TypeInt                // int64 in Go, long in Java
+	TypeUint               // uint in Go, long in Java, number in TS
 	TypeUUID               // uuid.UUID in Go, UUID in Java
 	TypeBool               // bool
 	TypeDecimal            // decimal.Decimal in Go, BigDecimal in Java

@@ -46,6 +46,8 @@ func (g *GoLangPack) baseTypeRef(td spec.TypeDescriptor) lang.TypeRef {
 		return lang.TypeRef{Name: "string"}
 	case spec.TypeInt:
 		return lang.TypeRef{Name: "int"}
+	case spec.TypeUint:
+		return lang.TypeRef{Name: "uint"}
 	case spec.TypeBool:
 		return lang.TypeRef{Name: "bool"}
 	case spec.TypeDecimal:
