@@ -8,5 +8,7 @@ require (
 	github.com/shopspring/decimal v1.3.1
 	github.com/stancil-gen/stancil-go v0.1.1
 	gorm.io/gorm v1.25.7
-	gorm.io/driver/postgres v1.5.4
-)
+{{ range .Drivers }}{{ if eq . "postgres" }}	gorm.io/driver/postgres v1.5.4
+{{ else if eq . "mysql" }}	gorm.io/driver/mysql v1.5.2
+{{ else if eq . "sqlite" }}	gorm.io/driver/sqlite v1.5.4
+{{ end }}{{ end }})

@@ -14,6 +14,7 @@ import (
 type GoModData struct {
 	Module    string
 	GoVersion string
+	Drivers   []string // database drivers used: "postgres", "mysql", "sqlite"
 }
 
 // ── Generator ───────────────────────────────────────────────────────────────
@@ -29,9 +30,20 @@ func NewGoModGenerator(e *template.Engine) generator.Generator {
 func (g *goModGenerator) ID() string { return "go.gomod" }
 
 func (g *goModGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File, error) {
+	seen := map[string]bool{}
+	var drivers []string
+	for _, db := range ctx.Spec.Databases {
+		d := string(db.Driver)
+		if !seen[d] {
+			seen[d] = true
+			drivers = append(drivers, d)
+		}
+	}
+
 	data := GoModData{
 		Module:    ctx.Spec.Module,
 		GoVersion: "1.21",
+		Drivers:   drivers,
 	}
 	content, err := g.engine.Render("go/infra/go.mod.tmpl", data)
 	if err != nil {

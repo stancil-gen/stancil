@@ -67,7 +67,7 @@ func (c *Checker) checkDatabases() {
 		return
 	}
 
-	validDrivers := map[string]bool{"postgres": true, "mysql": true, "mongo": true}
+	validDrivers := map[string]bool{"postgres": true, "mysql": true, "sqlite": true, "mongo": true}
 	validFrameworks := map[string]bool{"gorm": true, "sqlx": true, "sqlc": true}
 	seenNames := map[string]bool{}
 

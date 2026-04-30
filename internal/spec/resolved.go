@@ -14,6 +14,7 @@ const (
 
 	DBPostgres DBDriver = "postgres"
 	DBMySQL    DBDriver = "mysql"
+	DBSQLite   DBDriver = "sqlite"
 	DBMongo    DBDriver = "mongo"
 
 	FrameworkGin    Framework = "gin"

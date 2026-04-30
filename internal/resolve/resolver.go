@@ -99,6 +99,8 @@ func (r *Resolver) resolveDatabases() {
 			resolvedDriver = spec.DBPostgres
 		case "mysql":
 			resolvedDriver = spec.DBMySQL
+		case "sqlite":
+			resolvedDriver = spec.DBSQLite
 		case "mongo":
 			resolvedDriver = spec.DBMongo
 		}
