@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stancil — Deterministic Go Backend Code Generation</title>
-  <meta name="description" content="Write one YAML spec. Stancil generates 100% of the structural Go code. You write only the business logic." />
+  <title>Stancil — AI-Native Go Backend Generation</title>
+  <meta name="description" content="Let AI write the YAML spec. Stancil generates all your Go backend code instantly. You only implement the business logic." />
 
   <!-- Syntax highlighting -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
@@ -240,54 +240,94 @@
 
     /* ── How it works ── */
     #how { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .ai-steps { margin-top: 2.5rem; }
 
-    .pipeline {
+    .ai-step {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+    .ai-step-icon {
+      font-size: 1.75rem;
+      flex-shrink: 0;
+      width: 3rem;
+      height: 3rem;
       display: flex;
       align-items: center;
-      gap: 0;
-      margin: 2rem 0;
-      overflow-x: auto;
-      padding-bottom: 0.5rem;
-    }
-    .pipeline-step {
-      flex: 1;
-      min-width: 110px;
-      text-align: center;
-      padding: 1rem 0.5rem;
+      justify-content: center;
       background: var(--bg3);
       border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+    .ai-step-body { flex: 1; padding-bottom: 0.5rem; }
+    .ai-step-body h3 { font-size: 1.2rem; margin-bottom: 0.5rem; }
+    .ai-step-body p { color: var(--muted); font-size: 0.95rem; margin-bottom: 1rem; }
+
+    .ai-step-connector {
+      display: flex;
+      align-items: center;
+      padding: 0.5rem 0 0.5rem 1.35rem;
+    }
+    .connector-line {
+      width: 2px;
+      height: 2rem;
+      background: linear-gradient(to bottom, var(--border), var(--accent));
+      border-radius: 2px;
+    }
+
+    .ai-prompt-box {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent2);
       border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-top: 0.75rem;
     }
-    .pipeline-step:not(:last-child) {
-      border-right: none;
-      border-radius: var(--radius) 0 0 var(--radius);
-    }
-    .pipeline-step + .pipeline-step {
-      border-radius: 0;
-    }
-    .pipeline-step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
-    .pipeline-num {
+    .ai-prompt-label {
+      display: block;
       font-family: var(--font-mono);
       font-size: 0.7rem;
-      color: var(--accent);
-      margin-bottom: 0.25rem;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
     }
-    .pipeline-name {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .pipeline-desc {
-      font-size: 0.72rem;
+    .ai-prompt-text {
+      font-size: 0.93rem;
       color: var(--muted);
-      margin-top: 0.2rem;
+      font-style: italic;
+      line-height: 1.6;
     }
-    .pipeline-arrow {
-      color: var(--border);
-      font-size: 1.2rem;
-      padding: 0 0.25rem;
-      flex-shrink: 0;
+
+    .generated-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
     }
+    .gen-item {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--accent);
+      background: rgba(0,212,160,0.07);
+      border: 1px solid rgba(0,212,160,0.2);
+      border-radius: 4px;
+      padding: 0.2em 0.6em;
+    }
+
+    .ai-callout {
+      display: flex;
+      gap: 1.25rem;
+      align-items: flex-start;
+      background: rgba(0,212,160,0.05);
+      border: 1px solid rgba(0,212,160,0.2);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-top: 2.5rem;
+    }
+    .ai-callout-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: 0.1rem; }
+    .ai-callout strong { display: block; margin-bottom: 0.4rem; color: var(--text); }
+    .ai-callout p { color: var(--muted); font-size: 0.93rem; margin: 0; }
 
     .two-col {
       display: grid;
@@ -438,14 +478,15 @@
 <!-- ── Hero ── -->
 <section id="hero">
   <div class="container">
-    <div class="hero-badge">v0.1.0 — open source</div>
+    <div class="hero-badge">v0.1.0 — AI-native · open source</div>
     <h1 class="hero-title">
-      Write the spec.<br />
-      <span>Skip the boilerplate.</span>
+      Let AI write the spec.<br />
+      <span>Get working Go code instantly.</span>
     </h1>
     <p class="hero-sub">
-      Stancil generates 100% of your Go backend's structural code from a single YAML file —
-      models, repos, handlers, services, DI wiring. You only write the business logic.
+      Describe your backend to an AI. It writes the YAML. You run one command.
+      Stancil generates every model, repo, handler, and service —
+      you only implement the business logic in small hook functions.
     </p>
 
     <div>
@@ -466,15 +507,15 @@
     <div class="stats container-wide" style="margin-top: 3.5rem;">
       <div class="stat">
         <div class="stat-value">~85%</div>
-        <div class="stat-label">fewer tokens for AI-assisted backend dev</div>
+        <div class="stat-label">fewer tokens when AI uses stancil vs writing Go from scratch</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">&lt; 1s</div>
+        <div class="stat-label">to generate a full Go service from a YAML spec</div>
       </div>
       <div class="stat">
         <div class="stat-value">0</div>
-        <div class="stat-label">runtime dependencies — single static binary</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value">1</div>
-        <div class="stat-label">YAML file to describe your entire service</div>
+        <div class="stat-label">structural code to write — AI writes YAML, stancil writes Go</div>
       </div>
     </div>
   </div>
@@ -484,63 +525,83 @@
 <section id="how">
   <div class="container">
     <p class="section-label">How it works</p>
-    <h2>One spec. All the structure.</h2>
+    <h2>AI writes the spec. You implement the logic.</h2>
     <p class="lead">
-      Stancil reads your spec, runs a 6-stage pipeline, and writes every structural file into a read-only
-      <code>generated/</code> directory. Your business logic lives in <code>hooks/</code> — a directory
-      the tool never touches.
+      Stancil is designed to be used with AI. The AI handles all the structural decisions.
+      You handle all the business decisions. Neither has to do the other's job.
     </p>
 
-    <div class="pipeline">
-      <div class="pipeline-step">
-        <div class="pipeline-num">01</div>
-        <div class="pipeline-name">parse</div>
-        <div class="pipeline-desc">YAML → AST</div>
+    <div class="ai-steps">
+
+      <div class="ai-step">
+        <div class="ai-step-icon">🤖</div>
+        <div class="ai-step-body">
+          <h3>Ask AI to write the YAML</h3>
+          <p>Describe your service in plain English. Tell the AI what tables, APIs, and external calls you need. It writes the <code>stancil.yaml</code> spec in seconds.</p>
+          <div class="ai-prompt-box">
+            <span class="ai-prompt-label">prompt to AI</span>
+            <span class="ai-prompt-text">"I need a Go service with a users table, an orders table, a Stripe integration, and endpoints to create a user, place an order, and get an order. Write the stancil.yaml spec."</span>
+          </div>
+        </div>
       </div>
-      <div class="pipeline-arrow">›</div>
-      <div class="pipeline-step">
-        <div class="pipeline-num">02</div>
-        <div class="pipeline-name">validate</div>
-        <div class="pipeline-desc">catch all errors</div>
+
+      <div class="ai-step-connector">
+        <div class="connector-line"></div>
       </div>
-      <div class="pipeline-arrow">›</div>
-      <div class="pipeline-step">
-        <div class="pipeline-num">03</div>
-        <div class="pipeline-name">resolve</div>
-        <div class="pipeline-desc">fill defaults</div>
+
+      <div class="ai-step">
+        <div class="ai-step-icon">⚡</div>
+        <div class="ai-step-body">
+          <h3>Run one command</h3>
+          <p>Stancil reads the spec and generates every structural Go file instantly — models, repos, handlers, services, DI wiring, <code>go.mod</code>. All read-only. All ready to compile.</p>
+          <pre><code class="language-bash">stencil generate stancil.yaml</code></pre>
+          <div class="generated-list">
+            <span class="gen-item">✓ tables/users/model.go</span>
+            <span class="gen-item">✓ tables/users/repository.go</span>
+            <span class="gen-item">✓ tables/orders/model.go</span>
+            <span class="gen-item">✓ externals/stripe_client.go</span>
+            <span class="gen-item">✓ apis/place_order/service.go</span>
+            <span class="gen-item">✓ apis/place_order/handler.go</span>
+            <span class="gen-item">✓ wire.go · routes.go · main.go · go.mod</span>
+          </div>
+        </div>
       </div>
-      <div class="pipeline-arrow">›</div>
-      <div class="pipeline-step">
-        <div class="pipeline-num">04</div>
-        <div class="pipeline-name">plan</div>
-        <div class="pipeline-desc">DAG ordering</div>
+
+      <div class="ai-step-connector">
+        <div class="connector-line"></div>
       </div>
-      <div class="pipeline-arrow">›</div>
-      <div class="pipeline-step">
-        <div class="pipeline-num">05</div>
-        <div class="pipeline-name">generate</div>
-        <div class="pipeline-desc">render templates</div>
+
+      <div class="ai-step">
+        <div class="ai-step-icon">🪝</div>
+        <div class="ai-step-body">
+          <h3>Implement only the hooks</h3>
+          <p>Hooks are small functions where you write the logic the generator can't infer — hashing a password, combining results from two infra calls, deciding whether to send an email. Everything else is already done.</p>
+          <pre><code class="language-go">// hooks/order_hooks.go — the only code you write
+
+func (h *Impl) BeforeResponse(ctx context.Context,
+    shared *order_ap_is.PlaceOrderContext) error {
+
+    // Combine results from Stripe + DB into the response
+    shared.Response = &order_ap_is.PlaceOrderResponse{
+        OrderId:  shared.WriteOrderOutput.ID,
+        ChargeId: shared.ChargePaymentOutput.Id,
+        Status:   string(shared.WriteOrderOutput.Status),
+    }
+    return nil
+}</code></pre>
+        </div>
       </div>
-      <div class="pipeline-arrow">›</div>
-      <div class="pipeline-step">
-        <div class="pipeline-num">06</div>
-        <div class="pipeline-name">emit</div>
-        <div class="pipeline-desc">write → lock</div>
+
+    </div>
+
+    <div class="ai-callout">
+      <div class="ai-callout-icon">💡</div>
+      <div>
+        <strong>Why this works for AI</strong>
+        <p>AI is great at writing compact YAML from a description. It's slow and expensive at writing hundreds of lines of boilerplate Go. Stancil eliminates the boilerplate entirely — reducing AI token usage by ~85% on typical backend tasks.</p>
       </div>
     </div>
 
-    <div class="two-col">
-      <div class="card">
-        <div class="card-icon">🔒</div>
-        <h3>generated/ is read-only</h3>
-        <p style="color:var(--muted);font-size:0.93rem;">Every generated file is locked with <code>chmod 444</code> and the macOS <code>uchg</code> immutable flag. You can't accidentally edit it. Run <code>stencil generate</code> to update it.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">🪝</div>
-        <h3>hooks/ is yours</h3>
-        <p style="color:var(--muted);font-size:0.93rem;">The generator never reads or modifies <code>hooks/</code>. Every hook is optional — unset hooks are skipped. You only implement what the generator can't infer.</p>
-      </div>
-    </div>
   </div>
 </section>
 
