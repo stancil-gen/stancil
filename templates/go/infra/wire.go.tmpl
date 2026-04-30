@@ -21,10 +21,12 @@ func Configure(c *container.Container, cfg *config.AppConfig) {
 {{ end }}{{ if .Externals }}
 	// External clients
 {{ range .Externals }}	c.Provide(func() *externals.{{ .ImplName }} { return externals.New{{ .ImplName }}(cfg) })
+	c.Provide(func(impl *externals.{{ .ImplName }}) externals.{{ .InterfaceName }} { return impl })
 {{ end }}
 {{ end }}
 {{ range .Provides }}
 	// {{ .Comment }}
-{{ if .IsFunc }}	c.Provide(func() {{ .ReturnType }} { return {{ .FuncBody }} })
+{{ if .BridgeFrom }}	c.Provide(func(impl {{ .BridgeFrom }}) {{ .ReturnType }} { return impl })
+{{ else if .IsFunc }}	c.Provide(func() {{ .ReturnType }} { return {{ .FuncBody }} })
 {{ else }}	c.Provide({{ .Constructor }})
 {{ end }}{{ end }}}

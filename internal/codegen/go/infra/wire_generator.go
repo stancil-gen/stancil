@@ -32,19 +32,22 @@ type WireImport struct {
 }
 
 type WireExternal struct {
-	ImplName string // "StripeClientImpl"
-	Pkg      string // "externals"
+	ImplName      string // "StripeClientImpl"
+	InterfaceName string // "StripeClient"
+	Pkg           string // "externals"
 }
 
 // WireProvide is one c.Provide(...) call in the generated wire.go.
 // If IsFunc is false: c.Provide(Constructor)
 // If IsFunc is true:  c.Provide(func() ReturnType { return FuncBody })
+// If BridgeFrom is set: c.Provide(func(impl BridgeFrom) ReturnType { return impl })
 type WireProvide struct {
 	Constructor string // used when IsFunc == false
 	Comment     string
 	IsFunc      bool   // true for hooks and mappers (anonymous func providers)
 	ReturnType  string // e.g. "*customer_ap_is.CreateCustomerHooks"
 	FuncBody    string // e.g. "&customer_ap_is.CreateCustomerHooks{}"
+	BridgeFrom  string // e.g. "*user_ap_is.UserAPIsServiceImpl" — concrete type to bridge from
 }
 
 // ── Generator ───────────────────────────────────────────────────────────────
@@ -109,7 +112,8 @@ func (g *wireGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File
 			})
 		}
 
-		// Service
+		// Service — constructor returns the interface type, so DI stores it
+		// under the interface key directly. No bridge needed.
 		provides = append(provides, WireProvide{
 			Constructor: pkg + ".New" + impl.Name,
 			Comment:     impl.Name,
@@ -125,9 +129,11 @@ func (g *wireGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.File
 	// ── Externals — use closure providers so they receive cfg ──
 	var externals []WireExternal
 	for _, impl := range s.ImplsOfKind(spec.ExternalImpl) {
+		ifaceName := strings.TrimSuffix(impl.Name, "Impl")
 		externals = append(externals, WireExternal{
-			ImplName: impl.Name,
-			Pkg:      "externals",
+			ImplName:      impl.Name,
+			InterfaceName: ifaceName,
+			Pkg:           "externals",
 		})
 	}
 

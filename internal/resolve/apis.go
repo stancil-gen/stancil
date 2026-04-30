@@ -421,7 +421,7 @@ func buildServiceImpl(
 				mapperFieldName := toPascalCase(api.Name) + "Mappers"
 				addDep("mappers:"+api.Name,
 					strings.ToLower(string(mapperFieldName[0]))+mapperFieldName[1:],
-					"*Default"+toPascalCase(api.Name)+"Mappers", "")
+					toPascalCase(api.Name)+"Mappers", "")
 			}
 		}
 

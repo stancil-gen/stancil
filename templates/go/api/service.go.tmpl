@@ -17,8 +17,11 @@ type {{ .ImplName }} struct {
 {{ range .Deps }}	{{ .FieldName }} {{ .TypeName }}
 {{ end }}}
 
+{{ if .InterfaceName }}
+func New{{ .ImplName }}({{ range $i, $d := .Deps }}{{ if $i }}, {{ end }}{{ $d.FieldName }} {{ $d.TypeName }}{{ end }}) {{ .InterfaceName }} {
+{{ else }}
 func New{{ .ImplName }}({{ range $i, $d := .Deps }}{{ if $i }}, {{ end }}{{ $d.FieldName }} {{ $d.TypeName }}{{ end }}) *{{ .ImplName }} {
-	return &{{ .ImplName }}{
+{{ end }}	return &{{ .ImplName }}{
 {{ range .Deps }}		{{ .FieldName }}: {{ .FieldName }},
 {{ end }}	}
 }

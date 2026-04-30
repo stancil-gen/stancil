@@ -28,10 +28,10 @@ type {{ .ImplName }} struct {
 {{ end }}}
 
 // New{{ .ImplName }} creates a new {{ .ImplName }}.
-{{ if .DBTypeName }}func New{{ .ImplName }}(d *db.{{ .DBTypeName }}) *{{ .ImplName }} {
+{{ if .DBTypeName }}func New{{ .ImplName }}(d *db.{{ .DBTypeName }}) {{ .InterfaceName }} {
 	return &{{ .ImplName }}{db: d}
 }
-{{ else }}func New{{ .ImplName }}(d *gorm.DB) *{{ .ImplName }} {
+{{ else }}func New{{ .ImplName }}(d *gorm.DB) {{ .InterfaceName }} {
 	return &{{ .ImplName }}{db: d}
 }
 {{ end }}
