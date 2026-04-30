@@ -11,6 +11,7 @@ builds:
     binary: stencil
     goos: [darwin, linux]
     goarch: [amd64, arm64]
+    goamd64: [v1]
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -21,8 +22,12 @@ builds:
 
 archives:
   - id: stencil
-    name_template: "stencil_{{ .Os | title }}_{{ .Arch | replace \"amd64\" \"x86_64\" }}"
-    format: tar.gz
+    name_template: >-
+      stencil_
+      {{- .Os | title }}_
+      {{- if eq .Arch "amd64"}}x86_64
+      {{- else}}{{.Arch}}{{end}}
+    formats: [tar.gz]
     files:
       - README.md
       - install.sh
