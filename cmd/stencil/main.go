@@ -27,6 +27,14 @@ import (
 	"stencil/internal/template"
 )
 
+// Injected at build time by GoReleaser via -ldflags.
+// Defaults to "dev" when building locally with go build.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "stencil",
 	Short: "Stencil CLI",
@@ -39,8 +47,21 @@ func init() {
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(diffCmd)
+	rootCmd.AddCommand(versionCmd)
 
 	generateCmd.Flags().Bool("force", false, "Regenerate even if the spec has not changed")
+}
+
+// ─── version ─────────────────────────────────────────────────────────────────
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print stencil version information",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("stencil %s\n", version)
+		fmt.Printf("  commit : %s\n", commit)
+		fmt.Printf("  built  : %s\n", date)
+	},
 }
 
 // ─── generate ────────────────────────────────────────────────────────────────

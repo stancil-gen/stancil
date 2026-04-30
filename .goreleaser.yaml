@@ -1,0 +1,59 @@
+version: 2
+project_name: stencil
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: stencil
+    main: ./cmd/stencil/main.go
+    binary: stencil
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: stencil
+    name_template: "stencil_{{ .Os | title }}_{{ .Arch | replace \"amd64\" \"x86_64\" }}"
+    format: tar.gz
+    files:
+      - README.md
+      - install.sh
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  github:
+    owner: stancil-gen
+    name: stancil
+  name_template: "v{{.Version}}"
+  header: |
+    ## Stancil v{{.Version}}
+
+    **Install in one command:**
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/stancil-gen/stancil/main/install.sh | sh
+    ```
+
+    Or install a specific version:
+    ```bash
+    STENCIL_VERSION={{.Version}} curl -fsSL https://raw.githubusercontent.com/stancil-gen/stancil/main/install.sh | sh
+    ```
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
