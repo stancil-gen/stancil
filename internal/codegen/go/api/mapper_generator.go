@@ -32,6 +32,7 @@ type MapperMethod struct {
 	ReturnType   string
 	ZeroValue    string
 	MustOverride bool
+	Body         string // pre-filled implementation body when inferrable
 }
 
 // ─── Generator ──────────────────────────────────────────────────────────────
@@ -119,30 +120,36 @@ func (g *mapperGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.Fi
 			}
 			fnName := "Map" + toPascalCase(stepID) + "Input"
 			returnType, zeroValue := deriveMapperReturnType(touch, tableModelLookup, extInputTypeLookup, module, addImport)
+
+			// Try to auto-generate a working body by matching request fields → model fields
+			body, mustOverride := buildMapInputBody(touch, method.FunctionName, returnType, zeroValue, ctx.Spec)
+
 			ms.Methods = append(ms.Methods, MapperMethod{
 				Name:         fnName,
 				ReturnType:   returnType,
 				ZeroValue:    zeroValue,
-				MustOverride: true,
+				MustOverride: mustOverride,
+				Body:         body,
 			})
 		}
 
-		// MapResponse — returns *ResponseType (typed, not interface{})
+		// MapResponse — returns shared.Response if the BeforeResponse hook set it,
+		// otherwise errors with a clear message pointing to the hook file.
 		respTypeName := method.FunctionName + "Response"
 		if ctx.Spec.ObjectByName(respTypeName) != nil {
 			ms.Methods = append(ms.Methods, MapperMethod{
-				Name:         "MapResponse",
-				ReturnType:   "*" + respTypeName,
-				ZeroValue:    "nil",
-				MustOverride: true,
+				Name:       "MapResponse",
+				ReturnType: "*" + respTypeName,
+				ZeroValue:  "nil",
+				Body: "\tif shared.Response != nil {\n\t\treturn shared.Response, nil\n\t}\n" +
+					"\treturn nil, fmt.Errorf(\"" + method.FunctionName + ": no response set — implement BeforeResponse hook in hooks/" + toSnakeCase(method.FunctionName) + "_hooks.go\")",
 			})
 		} else {
-			// Fallback: even without a known response DTO, generate MapResponse with interface{}
 			ms.Methods = append(ms.Methods, MapperMethod{
-				Name:         "MapResponse",
-				ReturnType:   "interface{}",
-				ZeroValue:    "nil",
-				MustOverride: true,
+				Name:       "MapResponse",
+				ReturnType: "interface{}",
+				ZeroValue:  "nil",
+				Body:       "\treturn shared.Response, nil",
 			})
 		}
 
@@ -230,4 +237,53 @@ func deriveMapperReturnType(
 	default:
 		return "interface{}", "nil"
 	}
+}
+
+// buildMapInputBody attempts to generate a working mapper body by matching
+// request fields → model fields by name and type.
+// Returns (body, mustOverride). mustOverride=true when fields need manual mapping.
+func buildMapInputBody(touch spec.ResolvedTouch, apiName, returnType, zeroValue string, s *spec.ResolvedSpec) (string, bool) {
+	// Only auto-map for table create/update ops
+	if touch.Kind != spec.TouchKindTable || touch.TableRef == nil {
+		return "\treturn " + zeroValue + ", fmt.Errorf(\"" + "Map" + toPascalCase(touch.StepID) + "Input must be implemented\")", true
+	}
+	if touch.Op != "create" && touch.Op != "update" {
+		// For get/delete, the mapper takes a UUID/ID from the path — can't auto-map
+		return "\t// Path param :id — extract from context in a BeforeXxx hook if needed\n\treturn " + zeroValue + ", nil", false
+	}
+
+	reqName := apiName + "Request"
+	reqObj := s.ObjectByName(reqName)
+	model := touch.TableRef
+
+	if reqObj == nil || model == nil {
+		return "\treturn " + zeroValue + ", fmt.Errorf(\"" + "Map" + toPascalCase(touch.StepID) + "Input must be implemented\")", true
+	}
+
+	// Build a set of request field names+kinds for quick lookup
+	reqFields := map[string]spec.TypeKind{}
+	for _, rf := range reqObj.Fields {
+		reqFields[rf.Name] = rf.Type.Kind
+	}
+
+	// Build the struct literal, matching model fields to request fields by name
+	var lines []string
+	tablePkg := model.TableName
+	lines = append(lines, "\treturn &"+tablePkg+"."+model.Name+"{")
+
+	hasUnmapped := false
+	for _, mf := range model.Fields {
+		if mf.Name == "ID" || mf.Name == "CreatedAt" || mf.Name == "UpdatedAt" || mf.Name == "DeletedAt" {
+			continue // skip auto-managed fields
+		}
+		if kind, ok := reqFields[mf.Name]; ok && kind == mf.Type.Kind {
+			lines = append(lines, "\t\t"+mf.Name+": shared.Request."+mf.Name+",")
+		} else {
+			lines = append(lines, "\t\t// "+mf.Name+": ???, // cannot infer — set in BeforeTable"+toPascalCase(model.TableName)+toPascalCase(touch.Op)+" hook")
+			hasUnmapped = true
+		}
+	}
+	lines = append(lines, "\t}, nil")
+
+	return strings.Join(lines, "\n"), hasUnmapped
 }

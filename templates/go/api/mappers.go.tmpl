@@ -9,17 +9,18 @@ import (
 {{ range .Mappers }}
 {{ $mapper := . }}
 // {{ $mapper.InterfaceName }} defines the mapper contract for the {{ $mapper.APIName }} API.
-// Each Map*Input method transforms shared context into the input for that step.
-// MapResponse assembles the final response DTO from the shared context.
+// Each Map*Input method builds the step input from the shared context.
+// MapResponse assembles the final response DTO (returns shared.Response if set by BeforeResponse hook).
 type {{ $mapper.InterfaceName }} interface {
 {{ range $mapper.Methods }}	{{ .Name }}(ctx context.Context, shared *{{ $mapper.ContextType }}) ({{ .ReturnType }}, error)
 {{ end }}}
 
-// {{ $mapper.DefaultImplName }} provides stub implementations that must be overridden.
+// {{ $mapper.DefaultImplName }} provides default implementations.
+// Fields that match by name+type between request and model are auto-mapped.
+// Fields marked "cannot infer" must be set in the corresponding Before hook.
 type {{ $mapper.DefaultImplName }} struct{}
 {{ range $mapper.Methods }}
 func (m *{{ $mapper.DefaultImplName }}) {{ .Name }}(ctx context.Context, shared *{{ $mapper.ContextType }}) ({{ .ReturnType }}, error) {
-{{ if .MustOverride }}	return {{ .ZeroValue }}, fmt.Errorf("{{ .Name }} must be implemented")
-{{ else }}	return {{ .ZeroValue }}, fmt.Errorf("{{ .Name }} must be implemented")
-{{ end }}}
+{{ .Body }}
+}
 {{ end }}{{ end }}
