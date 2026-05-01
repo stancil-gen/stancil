@@ -233,6 +233,7 @@ func buildRegistry() *generator.Registry {
 	reg.Register(api.NewDTOGenerator(e))
 	reg.Register(api.NewContextGenerator(e))
 	reg.Register(api.NewHooksGenerator(e))
+	reg.Register(api.NewHookScaffoldGenerator(e))
 	reg.Register(api.NewMapperGenerator(e))
 	reg.Register(api.NewServiceGenerator(e))
 	reg.Register(api.NewHandlerGenerator(e))

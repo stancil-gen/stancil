@@ -30,6 +30,8 @@ func (h *{{ $.ImplName }}Handler) {{ $h.Name }}(c *gin.Context) {
 		errors.WriteError(c, err)
 		return
 	}
-	handler.WriteOK(c, resp)
-}
+{{ if eq $h.StatusCode 201 }}	handler.WriteCreated(c, resp)
+{{ else if eq $h.StatusCode 204 }}	handler.WriteNoContent(c)
+{{ else }}	handler.WriteOK(c, resp)
+{{ end }}}
 {{ end }}

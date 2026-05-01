@@ -75,15 +75,8 @@ func (g *handlerGenerator) Generate(ctx generator.GeneratorContext) ([]emitter.F
 			h.HasRequest = true
 		}
 
-		// Status code
-		switch method.HTTPMethod {
-		case "POST":
-			h.StatusCode = 201
-		case "DELETE":
-			h.StatusCode = 204
-		default:
-			h.StatusCode = 200
-		}
+		// Status code — use the resolved value (derived from spec or HTTP method default)
+		h.StatusCode = method.HTTPStatus
 
 		handlers = append(handlers, h)
 	}

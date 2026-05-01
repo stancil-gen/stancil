@@ -1,0 +1,19 @@
+package hooks
+
+import (
+	"context"
+
+	{{ .APIPkg }} "{{ .APIImport }}"
+)
+
+// {{ .ImplName }} implements business logic for the {{ .APIName }} API.
+// This file is generated once as a scaffold — edit it freely.
+// Register hooks in hooks/register.go.
+type {{ .ImplName }} struct{}
+{{ range .Methods }}
+// {{ .HookName }} {{ .Comment }}.
+func (h *{{ $.ImplName }}) {{ .HookName }}(ctx context.Context, shared *{{ $.APIPkg }}.{{ $.CtxType }}) error {
+{{ .Body }}
+	return nil
+}
+{{ end }}

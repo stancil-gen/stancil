@@ -49,7 +49,8 @@ type DatabaseAST struct {
 
 type TableAST struct {
 	Name        string           `yaml:"name"`
-	DB          string           `yaml:"db"` // name of database from db: block
+	DB          string           `yaml:"db"`
+	IDType      string           `yaml:"id_type"` // "uuid" (default) | "auto_increment"
 	Fields      []FieldAST       `yaml:"fields"`
 	Queries     []QueryAST       `yaml:"queries"`
 	SoftDelete  bool             `yaml:"soft_delete"`
@@ -262,6 +263,7 @@ type APIAST struct {
 	Name     string       `yaml:"name"`
 	Method   string       `yaml:"method"`
 	Path     string       `yaml:"path"`
+	Status   int          `yaml:"status"` // HTTP success status code (e.g. 201, 200, 204)
 	Auth     string       `yaml:"auth"`
 	Roles    []string     `yaml:"roles"`
 	Owner    bool         `yaml:"owner"`

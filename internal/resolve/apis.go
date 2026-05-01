@@ -432,6 +432,7 @@ func buildServiceImpl(
 			MapperRef:      mapperRef,
 			HTTPMethod:     api.Method,
 			HTTPPath:       api.Path,
+			HTTPStatus:     resolveHTTPStatus(api.Status, api.Method),
 		}
 
 		for _, step := range api.Steps {
@@ -690,4 +691,24 @@ func matchFieldInObject(target spec.ResolvedField, source *spec.ResolvedObject, 
 		}
 	}
 	return ""
+}
+
+// resolveHTTPStatus returns the HTTP success status code for an API.
+// If the spec declares an explicit status, use it.
+// Otherwise derive a sensible default from the HTTP method:
+//   POST   → 201 Created
+//   DELETE → 204 No Content
+//   GET, PATCH, PUT → 200 OK
+func resolveHTTPStatus(declared int, method string) int {
+	if declared != 0 {
+		return declared
+	}
+	switch strings.ToUpper(method) {
+	case "POST":
+		return 201
+	case "DELETE":
+		return 204
+	default:
+		return 200
+	}
 }

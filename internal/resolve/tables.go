@@ -55,24 +55,44 @@ func (f *TablesFeature) Resolve(ast *spec.SpecAST, ir *spec.ResolvedSpec) error 
 
 func buildTableModel(t spec.TableAST) spec.ResolvedObject {
 	name := modelName(t.Name)
+
+	// Resolve id_type: default to "uuid", support "auto_increment"
+	idType := t.IDType
+	if idType == "" {
+		idType = "uuid"
+	}
+
 	obj := spec.ResolvedObject{
 		Name:       name,
 		Path:       fmt.Sprintf("generated/repo/%s/model.go", t.Name),
 		Kind:       spec.TableModel,
 		TableName:  t.Name,
 		PrimaryKey: "ID",
+		IDType:     idType,
 		SoftDelete: t.SoftDelete,
 		BulkCreate: t.BulkCreate,
 	}
 
-	// Inject implicit ID field first
-	obj.Fields = append(obj.Fields, spec.ResolvedField{
-		Name:     "ID",
-		DBColumn: "id",
-		Type:     spec.TypeDescriptor{Kind: spec.TypeUUID, DBType: "UUID"},
-		Required: true,
-		Unique:   true,
-	})
+	// Inject implicit ID field — type depends on id_type
+	var idField spec.ResolvedField
+	if idType == "auto_increment" {
+		idField = spec.ResolvedField{
+			Name:     "ID",
+			DBColumn: "id",
+			Type:     spec.TypeDescriptor{Kind: spec.TypeUint, DBType: "INTEGER"},
+			Required: true,
+			Unique:   true,
+		}
+	} else {
+		idField = spec.ResolvedField{
+			Name:     "ID",
+			DBColumn: "id",
+			Type:     spec.TypeDescriptor{Kind: spec.TypeUUID, DBType: "UUID"},
+			Required: true,
+			Unique:   true,
+		}
+	}
+	obj.Fields = append(obj.Fields, idField)
 
 	// User-declared fields
 	for _, f := range t.Fields {

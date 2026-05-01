@@ -104,6 +104,7 @@ type ResolvedObject struct {
 	// DB metadata — only populated when Kind == TableModel
 	TableName  string // snake_case: "users"
 	PrimaryKey string // field Name of the PK: "ID"
+	IDType     string // "uuid" | "auto_increment"
 	SoftDelete bool
 	BulkCreate bool
 	Indexes    []ResolvedIndex
@@ -385,6 +386,7 @@ type ResolvedMethod struct {
 	MapperRef      *ResolvedInterface
 	HTTPMethod     string
 	HTTPPath       string
+	HTTPStatus     int // success status code: 201, 200, 204 — 0 means "derive from method"
 
 	// TransactionImpl only
 	InputParamsRef *ResolvedObject

@@ -31,6 +31,7 @@ type ModelData struct {
 	Package    string
 	ModelName  string
 	TableName  string
+	IDType     string // "uuid" | "auto_increment"
 	Fields     []ModelField
 	EnumBlocks []EnumBlock
 	Imports    []string
@@ -74,6 +75,7 @@ func buildModelData(obj *spec.ResolvedObject, module string, lang langPack) Mode
 		Package:   obj.TableName,
 		ModelName: obj.Name,
 		TableName: obj.TableName,
+		IDType:    obj.IDType,
 	}
 
 	hasCustomTypes := false
@@ -97,10 +99,21 @@ func buildModelData(obj *spec.ResolvedObject, module string, lang langPack) Mode
 			hasCustomTypes = true
 		}
 
+		tag := lang.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules)
+
+		// Override the ID field GORM tag based on id_type
+		if f.Name == "ID" {
+			if obj.IDType == "auto_increment" {
+				tag = "`gorm:\"primaryKey;autoIncrement\" json:\"id\"`"
+			} else {
+				tag = "`gorm:\"primaryKey;type:uuid;default:gen_random_uuid()\" json:\"id\"`"
+			}
+		}
+
 		data.Fields = append(data.Fields, ModelField{
 			Name: f.Name,
 			Type: goType,
-			Tag:  lang.FieldTag(f.Name, f.DBColumn, f.Required, f.Unique, f.Rules),
+			Tag:  tag,
 		})
 
 		for _, imp := range ref.Imports {
